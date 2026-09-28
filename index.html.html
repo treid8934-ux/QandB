@@ -4509,11 +4509,11 @@ function copyRows(s, rows){
   if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
 }
 
-// start with a realistic example
-q.value = 'BHP';
+// start with an empty search
+q.value = '';
 search();
-const bhp = index.find(s => s.code === 'BHP');
-select(bhp ? bhp.i : (matches[0] && matches[0].s.i));
+select(null);
+q.focus();
 }
 
 // --- Lazy loader: fetch dividends.json the first time the tab is opened ---
