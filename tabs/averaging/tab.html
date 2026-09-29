@@ -1,0 +1,171 @@
+<div id="view-averaging" class="space-y-6">
+
+    <!-- Header Banner -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <span class="bg-qbNavy-50 text-qbNavy-600 text-xs font-semibold px-3 py-1 rounded-full border border-qbNavy-100 uppercase tracking-wider">Division 405 ITAA 1997 · Australian Resident</span>
+            <h2 class="text-2xl md:text-3xl font-extrabold text-qbNavy-700 mt-2">Special Professionals Income Averaging</h2>
+            <p class="text-slate-500 text-sm mt-1 font-medium">Model ATPI, AASPI and the concessional averaged tax for authors, inventors, performing artists, production associates and sportspeople.</p>
+        </div>
+        <button onclick="window.SpecialProfAveragingApp.exportToCSV()" class="no-print bg-qbNavy-600 hover:bg-qbNavy-700 text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition shadow-sm flex-shrink-0">
+            <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export CSV
+        </button>
+    </div>
+
+    <!-- Setup Card -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+        <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+            <i data-lucide="sliders-horizontal" class="w-5 h-5 text-qbTeal-500"></i> Client & Averaging Setup
+        </h3>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="avg-client-name" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Client Name / Ref</label>
+                <input type="text" id="avg-client-name" value="Client Averaging Schedule" placeholder="e.g. Jane Doe - Author" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 focus:outline-none p-3 font-semibold">
+            </div>
+            <div>
+                <label for="avg-start-year" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">First Professional Year (Year 1)</label>
+                <select id="avg-start-year" onchange="window.SpecialProfAveragingApp.renderRows(); window.SpecialProfAveragingApp.calculate();" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 p-3 font-semibold cursor-pointer">
+                    <!-- Options generated from TAX_DATA -->
+                </select>
+            </div>
+            <div>
+                <label for="avg-num-years" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Years to Model</label>
+                <select id="avg-num-years" onchange="window.SpecialProfAveragingApp.renderRows(); window.SpecialProfAveragingApp.calculate();" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 p-3 font-semibold cursor-pointer">
+                    <option value="1">1 Tax Year</option>
+                    <option value="2">2 Tax Years</option>
+                    <option value="3" selected>3 Tax Years</option>
+                    <option value="4">4 Tax Years</option>
+                    <option value="5">5 Tax Years</option>
+                    <option value="6">6 Tax Years</option>
+                    <option value="7">7 Tax Years</option>
+                    <option value="8">8 Tax Years</option>
+                </select>
+            </div>
+            <div>
+                <label for="avg-category" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Special Professional Category</label>
+                <select id="avg-category" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 p-3 font-semibold cursor-pointer">
+                    <option value="Author / Inventor">Author or Inventor</option>
+                    <option value="Performing Artist">Performing Artist</option>
+                    <option value="Production Associate">Production Associate</option>
+                    <option value="Sportsperson">Sportsperson</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="p-3 bg-blue-50 border-l-4 border-qbNavy-500 rounded-r text-qbNavy-700 text-xs flex items-start gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-qbNavy-500 flex-shrink-0 mt-0.5"></i>
+            <div>
+                <strong>Division 405 Qualification Note:</strong> Year 1 is the first income year in which taxable professional income (TPI) derived as an Australian resident exceeds <strong>$2,500</strong>. ATPI is nil in Year 1 and phases in (⅓ of Year 1 TPI in Year 2, then ¼ of prior years' TPI) until a full four-year average applies from Year 5.
+            </div>
+        </div>
+
+        <!-- Rates-source warning (shown when a modelled year is outside TAX_DATA) -->
+        <div id="avg-rates-warning" class="hidden p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start gap-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5"></i>
+            <span id="avg-rates-warning-text"></span>
+        </div>
+    </div>
+
+    <!-- Hero + KPI Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-gradient-to-br from-qbNavy-600 via-qbNavy-700 to-qbNavy-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+            <div class="absolute -right-8 -bottom-8 opacity-10">
+                <i data-lucide="piggy-bank" class="w-48 h-48"></i>
+            </div>
+            <div class="relative z-10">
+                <span class="text-xs uppercase tracking-widest text-qbTeal-400 font-bold">Total Tax Benefit from Averaging</span>
+                <h3 id="avg-kpi-savings" class="text-4xl sm:text-5xl font-extrabold tracking-tight mt-1 text-white">$0</h3>
+                <p class="text-xs text-blue-200 mt-1">Standard basic tax less Division 405 averaged basic tax, across all modelled years</p>
+            </div>
+        </div>
+        <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Cumulative TPI</span>
+                <span id="avg-kpi-tpi" class="text-xl font-extrabold text-qbNavy-600 mt-1">$0</span>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Standard Basic Tax</span>
+                <span id="avg-kpi-standard" class="text-xl font-extrabold text-red-600 mt-1">$0</span>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-center">
+                <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Averaged Basic Tax</span>
+                <span id="avg-kpi-averaged" class="text-xl font-extrabold text-emerald-600 mt-1">$0</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Income Input Schedule -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4 no-print">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3 gap-3">
+            <div>
+                <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2">
+                    <i data-lucide="pencil-line" class="w-5 h-5 text-qbTeal-500"></i> Income Input Schedule
+                </h3>
+                <p class="text-xs text-gray-500 mt-0.5">Enter taxable professional income (TPI) and other taxable income for each year.</p>
+            </div>
+            <button onclick="window.SpecialProfAveragingApp.reset()" class="bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 transition border border-gray-200 flex-shrink-0">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear Inputs
+            </button>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+                <thead>
+                    <tr class="bg-gray-50 text-gray-700 border-b border-gray-200 text-xs uppercase font-bold tracking-wider">
+                        <th class="py-3 px-3">Financial Year</th>
+                        <th class="py-3 px-3">Phase</th>
+                        <th class="py-3 px-3">Taxable Professional Income ($)</th>
+                        <th class="py-3 px-3">Other Taxable Income ($)</th>
+                        <th class="py-3 px-3 text-right">Total Taxable Income</th>
+                    </tr>
+                </thead>
+                <tbody id="avg-input-body" class="divide-y divide-gray-100"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Summary Schedule -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
+        <div class="flex items-center justify-between border-b border-gray-100 pb-3 gap-3">
+            <div>
+                <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2">
+                    <i data-lucide="table-2" class="w-5 h-5 text-qbTeal-500"></i> Multi-Year Averaging Summary
+                </h3>
+                <p class="text-xs text-gray-500 mt-0.5">Standard individual basic tax vs Division 405 averaged basic tax</p>
+            </div>
+            <span id="avg-client-badge" class="text-xs font-bold bg-blue-50 text-qbNavy-600 px-3 py-1 rounded-full border border-blue-100 text-right"></span>
+        </div>
+
+        <div class="overflow-x-auto rounded-xl border border-gray-200">
+            <table class="w-full text-left text-xs sm:text-sm border-collapse">
+                <thead>
+                    <tr class="bg-qbNavy-600 text-white font-semibold uppercase text-xs tracking-wider">
+                        <th class="py-3 px-3">Financial Year</th>
+                        <th class="py-3 px-3 text-right">TPI</th>
+                        <th class="py-3 px-3 text-right">ATPI</th>
+                        <th class="py-3 px-3 text-right">AASPI</th>
+                        <th class="py-3 px-3 text-right">Total Income</th>
+                        <th class="py-3 px-3 text-right">Standard Tax</th>
+                        <th class="py-3 px-3 text-right">Averaged Tax</th>
+                        <th class="py-3 px-3 text-right">Benefit</th>
+                    </tr>
+                </thead>
+                <tbody id="avg-summary-body" class="divide-y divide-gray-100"></tbody>
+                <tfoot id="avg-summary-foot" class="bg-gray-50 font-bold text-gray-900 border-t-2 border-gray-200"></tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- Statutory Breakdown -->
+    <div class="space-y-4">
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2">
+                <i data-lucide="list-checks" class="w-5 h-5 text-qbTeal-500"></i> Step-by-Step Breakdown & Tax Return Labels
+            </h3>
+            <span class="text-xs text-gray-500 no-print hidden sm:inline">Click a year to expand / collapse</span>
+        </div>
+        <div id="avg-breakdown-container" class="space-y-4"></div>
+        <p class="text-[11px] text-gray-500">Basic tax only — excludes Medicare levy, MLS, HELP repayments and tax offsets. Rates are drawn from the same table as the Income Tax Calculator tab.</p>
+    </div>
+</div>

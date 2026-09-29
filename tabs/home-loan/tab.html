@@ -1,0 +1,573 @@
+<div id="view-home-loan" class="space-y-6">
+
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <span class="bg-brand-50 text-brand-700 text-xs font-semibold px-3 py-1 rounded-full border border-brand-200 uppercase tracking-wider">RBA Cash Rate Target Benchmark: 4.35%</span>
+            <h2 id="hl-title" class="text-2xl md:text-3xl font-extrabold text-qbNavy-700 mt-2">Home Loan Borrowing & Repayment Calculator</h2>
+            <p id="hl-subtitle" class="text-slate-500 text-sm mt-1 font-medium">Estimate borrowing capacity, stamp duty concessions, Home Guarantee LMI waiver, serviceability stress, and loan payoff trajectory.</p>
+        </div>
+        <div class="inline-flex p-1 bg-gray-100 rounded-xl no-print flex-shrink-0" role="group" aria-label="Calculator mode">
+            <button type="button" id="hl-mode-new" onclick="setHomeLoanMode('new')" class="hl-mode-btn px-4 py-2 rounded-lg text-sm font-bold transition bg-qbNavy-600 text-white shadow-sm">New Purchase</button>
+            <button type="button" id="hl-mode-existing" onclick="setHomeLoanMode('existing')" class="hl-mode-btn px-4 py-2 rounded-lg text-sm font-bold transition text-gray-600 hover:bg-white">Existing Mortgage</button>
+        </div>
+    </div>
+
+    <div id="hl-new-view" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+        <!-- Left Column: Input Form (5 Cols) -->
+        <section class="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-5">
+            <h3 class="text-lg font-bold text-slate-900 border-b pb-3 flex items-center justify-between">
+                <span>1. Loan & Income Details</span>
+                <span class="text-xs font-normal text-slate-500">Auto-synced</span>
+            </h3>
+
+            <!-- State & FHO Toggle -->
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="stateSelect" class="block text-xs font-semibold text-slate-700 uppercase mb-1">State / Territory</label>
+                    <select id="stateSelect" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <option value="VIC" selected>VIC (Victoria)</option>
+                        <option value="NSW">NSW (New South Wales)</option>
+                        <option value="QLD">QLD (Queensland)</option>
+                        <option value="WA">WA (Western Australia)</option>
+                        <option value="SA">SA (South Australia)</option>
+                        <option value="TAS">TAS (Tasmania)</option>
+                        <option value="ACT">ACT (Australian Capital Territory)</option>
+                        <option value="NT">NT (Northern Territory)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="fhoToggle" class="block text-xs font-semibold text-slate-700 uppercase mb-1">First Home Buyer?</label>
+                    <div class="flex items-center h-10 px-3 bg-slate-50 border border-slate-300 rounded-lg">
+                        <input type="checkbox" id="fhoToggle" checked class="w-4 h-4 text-brand-600 rounded focus:ring-brand-500">
+                        <label for="fhoToggle" class="ml-2 text-xs font-medium text-slate-700 cursor-pointer">Yes (stamp duty concession)</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Home Guarantee Scheme (5% Deposit Scheme) -->
+            <div class="p-3.5 bg-blue-50/70 rounded-xl border border-blue-100 space-y-2.5">
+                <div class="flex items-center justify-between gap-3">
+                    <div>
+                        <span class="block text-sm font-bold text-qbNavy-600">Home Guarantee Scheme</span>
+                        <span class="text-[11px] text-gray-500">5% Deposit Scheme — LMI waived if price is under the cap</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input type="checkbox" id="fhgToggle" checked class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                    </label>
+                </div>
+                <div id="fhgFields" class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                    <div>
+                        <label for="fhgLocation" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Property Location</label>
+                        <select id="fhgLocation" class="w-full bg-white border border-slate-300 rounded-lg p-2 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                            <option value="capital" selected>Capital city & regional centres</option>
+                            <option value="rest">Rest of state</option>
+                        </select>
+                    </div>
+                    <div class="text-xs">
+                        <span class="text-gray-500 block">Price cap</span>
+                        <strong id="fhgCapText" class="text-qbNavy-600 text-base">$950,000</strong>
+                    </div>
+                </div>
+                <p id="fhgStatusText" class="text-[11px] font-semibold"></p>
+            </div>
+
+            <!-- Incomes synced from Tax Calc -->
+            <div class="space-y-3">
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="userIncome" class="block text-xs font-semibold text-slate-700 uppercase">Your Annual Gross Income ($)</label>
+                        <span class="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold">From Tax Tool</span>
+                    </div>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                        <input type="number" id="userIncome" value="0" disabled class="w-full pl-7 pr-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 cursor-not-allowed">
+                    </div>
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label for="spouseIncome" class="block text-xs font-semibold text-slate-700 uppercase">Spouse / Partner Gross Income ($)</label>
+                        <span class="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-bold">From Tax Tool</span>
+                    </div>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                        <input type="number" id="spouseIncome" value="0" disabled class="w-full pl-7 pr-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 cursor-not-allowed">
+                    </div>
+                </div>
+
+                <!-- Combined Gross & Post-Tax Income Summary pill -->
+                <div class="p-3 bg-brand-50 rounded-xl space-y-1">
+                    <div class="flex justify-between items-center text-xs text-brand-800 font-medium">
+                        <span>Combined Gross Income:</span>
+                        <span id="combinedIncomeDisplay" class="font-bold text-sm">$185,000 / yr</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs text-emerald-800 font-medium border-t border-brand-200/60 pt-1">
+                        <span>Combined Post-Tax Take Home:</span>
+                        <span id="combinedTakeHomeDisplay" class="font-bold text-sm text-emerald-700">$0 / yr</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Deposit & Target Property Price -->
+            <div class="space-y-3 border-t border-slate-100 pt-3">
+                <div>
+                    <label for="depositInput" class="block text-xs font-semibold text-slate-700 uppercase">Savings / Deposit Amount ($)</label>
+                    <div class="relative mt-1">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                        <input type="number" id="depositInput" value="0" step="5000" min="0" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <!-- Deposit warning -->
+                    <div id="depositWarning" class="hidden mt-1.5 p-2 bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-medium"></div>
+                </div>
+
+                <div>
+                    <label for="targetPropertyValue" class="block text-xs font-semibold text-slate-700 uppercase">Target Property Value ($)</label>
+                    <div class="relative mt-1">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                        <input type="number" id="targetPropertyValue" value="0" step="10000" min="50000" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1">Used to evaluate exact repayments, LMI, and stamp duty concessions.</p>
+                </div>
+            </div>
+
+            <!-- Interest Rate & Loan Terms -->
+            <div class="space-y-3 border-t border-slate-100 pt-3">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label for="interestRate" class="block text-xs font-semibold text-slate-700 uppercase">Retail Interest Rate (% p.a.)</label>
+                        <input type="number" id="interestRate" value="6.25" step="0.05" min="1" max="15" class="w-full mt-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="loanTerm" class="block text-xs font-semibold text-slate-700 uppercase">Loan Term</label>
+                        <select id="loanTerm" class="w-full mt-1 bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm font-medium focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                            <option value="30" selected>30 Years</option>
+                            <option value="25">25 Years</option>
+                            <option value="20">20 Years</option>
+                            <option value="15">15 Years</option>
+                            <option value="10">10 Years</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Repayment Frequency -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Repayment Frequency</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button type="button" data-freq="monthly" class="freq-btn active-freq bg-brand-600 text-white py-1.5 rounded-lg text-xs font-semibold transition">Monthly</button>
+                        <button type="button" data-freq="fortnightly" class="freq-btn bg-slate-100 text-slate-600 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-200 transition">Fortnightly</button>
+                        <button type="button" data-freq="weekly" class="freq-btn bg-slate-100 text-slate-600 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-200 transition">Weekly</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extra Repayments -->
+            <div class="space-y-3 border-t border-slate-100 pt-3">
+                <label for="extraRepayment" class="block text-xs font-semibold text-slate-700 uppercase">Extra Repayment per Period ($)</label>
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-sm">$</span>
+                    <input type="number" id="extraRepayment" value="0" step="50" min="0" class="w-full pl-7 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Outputs & Analytics (7 Cols) -->
+        <div class="lg:col-span-7 space-y-6">
+
+            <!-- Repayments Box with Buffer Callout -->
+            <div class="bg-slate-950 text-white p-6 rounded-2xl shadow-md space-y-4 relative overflow-hidden">
+                <div class="flex justify-between items-start border-b border-slate-700/80 pb-3">
+                    <div>
+                        <span class="text-xs uppercase tracking-wider text-slate-400 font-bold block mb-1">Estimated Loan Repayment</span>
+                        <div class="flex items-baseline gap-2 bg-slate-800/90 px-4 py-2 rounded-xl border border-slate-700/80 inline-flex shadow-inner">
+                            <span id="mainRepaymentDisplay" class="text-3xl md:text-4xl font-extrabold text-qbTeal-400 tracking-tight">$0</span>
+                            <span id="repaymentFreqLabel" class="text-sm text-slate-200 font-semibold">/ month</span>
+                        </div>
+                    </div>
+                    <!-- Financial Stress Badge -->
+                    <div id="stressBadge" class="px-3 py-1.5 rounded-full text-xs font-bold border">
+                        Calculating...
+                    </div>
+                </div>
+
+                <!-- Rate Buffer Callout (+0.50% / +2 RBA Hikes) -->
+                <div class="bg-slate-800/90 rounded-xl p-3 border border-slate-700/60 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold text-amber-400 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                            Interest Rate Buffer (+0.50% / 2 RBA Hikes)
+                        </span>
+                        <p class="text-[11px] text-slate-400">Repayment if rate rises from <span id="currentRateLabel">6.25%</span> to <span id="bufferedRateLabel">6.75%</span>:</p>
+                    </div>
+                    <div class="text-right">
+                        <span id="bufferedRepaymentDisplay" class="text-base font-bold text-slate-200">$0</span>
+                        <span id="bufferedFreqLabel" class="text-[11px] text-slate-400 block">/ month</span>
+                    </div>
+                </div>
+
+                <!-- 30% Financial Stress Status Banner -->
+                <div id="stressBanner" class="text-xs p-3 rounded-xl flex items-start gap-2">
+                    <div id="stressBannerIcon" class="mt-0.5"></div>
+                    <div>
+                        <span id="stressBannerTitle" class="font-bold block">30% Rule Check</span>
+                        <span id="stressBannerDesc" class="text-slate-300">Repayments account for <strong id="stressPercentText">0%</strong> of gross monthly income ($<span id="grossMonthlyIncomeText">0</span>).</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Borrowing & Property Range Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Max Borrowing Card -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Estimated Borrowing Capacity</span>
+                    <div class="text-2xl font-black text-slate-900" id="maxBorrowingDisplay">$0</div>
+                    <p class="text-xs text-slate-500">Based on standard APRA DTI limits & serviceability floor (Rate + 3.00% buffer).</p>
+                    <div class="text-[11px] text-slate-400 pt-2 border-t border-slate-100 flex justify-between">
+                        <span>Max DTI (6.0x): <strong id="dtiCapText">$0</strong></span>
+                        <span>Serviceability Cap: <strong id="servCapText">$0</strong></span>
+                    </div>
+                </div>
+
+                <!-- Max House Price Card -->
+                <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-2">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Estimated Purchasing Power</span>
+                    <div class="text-2xl font-black text-brand-600" id="maxHousePriceDisplay">$0</div>
+                    <p class="text-xs text-slate-500">Borrowing Capacity + Deposit minus estimated Stamp Duty & Fees.</p>
+                    <div class="text-[11px] text-slate-400 pt-2 border-t border-slate-100 flex justify-between">
+                        <span>LVR Status: <strong id="lvrDisplay" class="text-slate-700">0%</strong></span>
+                        <span>LMI Status: <strong id="lmiStatusBadge" class="text-slate-700">Waived</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dynamic Loan Payoff Trajectory Chart Card -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                            <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                            Loan Balance & Extra Repayments Payoff Trajectory
+                        </h3>
+                        <p class="text-[11px] text-slate-400">Comparing standard amortization vs extra repayment payoff curve over loan term.</p>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs font-medium">
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-1 bg-slate-400 rounded-full inline-block"></span> Standard</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-1 bg-emerald-500 rounded-full inline-block"></span> With Extra</span>
+                    </div>
+                </div>
+
+                <!-- SVG Chart Container -->
+                <div class="relative w-full h-48 bg-slate-50 rounded-xl border border-slate-100 p-2">
+                    <svg id="loanTrajectoryChart" class="w-full h-full overflow-visible" viewBox="0 0 500 180" preserveAspectRatio="none">
+                        <!-- Grid Lines -->
+                        <line x1="0" y1="40" x2="500" y2="40" stroke="#e2e8f0" stroke-dasharray="4,4" />
+                        <line x1="0" y1="90" x2="500" y2="90" stroke="#e2e8f0" stroke-dasharray="4,4" />
+                        <line x1="0" y1="140" x2="500" y2="140" stroke="#e2e8f0" stroke-dasharray="4,4" />
+
+                        <!-- Path 1: Standard Payoff -->
+                        <path id="pathStandard" d="M 0 10 L 500 160" fill="none" stroke="#94a3b8" stroke-width="2.5" stroke-dasharray="4,2" />
+
+                        <!-- Path 2: Extra Repayment Payoff -->
+                        <path id="pathExtra" d="M 0 10 L 500 160" fill="none" stroke="#10b981" stroke-width="3" />
+                    </svg>
+                    <!-- Y Axis Labels -->
+                    <div class="absolute left-2 top-2 text-[10px] font-semibold text-slate-400" id="chartMaxLoanLabel">$0</div>
+                    <div class="absolute left-2 bottom-2 text-[10px] font-semibold text-slate-400">$0</div>
+                    <!-- X Axis Labels -->
+                    <div class="absolute right-2 bottom-2 text-[10px] font-semibold text-slate-400" id="chartMaxYearsLabel">30 Yrs</div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 pt-1">
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="text-xs text-slate-500 block">Total Interest Saved</span>
+                        <span id="extraInterestSaved" class="text-xl font-extrabold text-emerald-600">$0</span>
+                    </div>
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                        <span class="text-xs text-slate-500 block">Time Off Loan</span>
+                        <span id="extraTimeSaved" class="text-xl font-extrabold text-brand-600">0 Yrs, 0 Mos</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 50 / 30 / 20 Budget Gauge (Uses Combined Post-Tax Take Home Pay) -->
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wide">50 / 30 / 20 Rule Allocation Visualizer</h3>
+                        <p class="text-[11px] text-slate-400">Calculated from Combined Household Post-Tax Take-Home Pay</p>
+                    </div>
+                    <span class="text-xs text-slate-500">Post-Tax Monthly: <strong id="gaugeGrossMonthly" class="text-slate-800">$0</strong></span>
+                </div>
+
+                <!-- Multi-segment Progress Bar -->
+                <div class="w-full bg-slate-100 h-6 rounded-full overflow-hidden flex p-1 space-x-1">
+                    <div id="barNeeds" class="gauge-bar-transition bg-rose-500 h-full rounded-l-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden" style="width: 50%;">Needs</div>
+                    <div id="barWants" class="gauge-bar-transition bg-amber-400 h-full flex items-center justify-center text-[10px] font-bold text-slate-900 overflow-hidden" style="width: 30%;">Wants</div>
+                    <div id="barSavings" class="gauge-bar-transition bg-emerald-500 h-full rounded-r-full flex items-center justify-center text-[10px] font-bold text-white overflow-hidden" style="width: 20%;">Savings</div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2 text-center text-xs">
+                    <div class="p-2 bg-rose-50 rounded-lg border border-rose-100">
+                        <span class="block text-rose-700 font-bold">50% Needs</span>
+                        <span class="text-slate-600 font-medium" id="needsValue">$0</span>
+                        <span class="block text-[10px] text-slate-400 mt-0.5" id="mortgageShareText">Mortgage: 0%</span>
+                    </div>
+                    <div class="p-2 bg-amber-50 rounded-lg border border-amber-100">
+                        <span class="block text-amber-700 font-bold">30% Wants</span>
+                        <span class="text-slate-600 font-medium" id="wantsValue">$0</span>
+                        <span class="block text-[10px] text-slate-400 mt-0.5">Lifestyle & Dining</span>
+                    </div>
+                    <div class="p-2 bg-emerald-50 rounded-lg border border-emerald-100">
+                        <span class="block text-emerald-700 font-bold">20% Savings</span>
+                        <span class="text-slate-600 font-medium" id="savingsValue">$0</span>
+                        <span class="block text-[10px] text-slate-400 mt-0.5">Investments & Extra</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Cost & Upfront Cash Breakdown Table -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                    <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Upfront Cash Required Breakdown</h3>
+                    <span class="text-xs text-slate-500">Property Value: <strong>$<span id="breakdownPropertyValue">750,000</span></strong></span>
+                </div>
+                <div class="divide-y divide-slate-100 text-xs">
+                    <!-- Deposit Row -->
+                    <div class="p-3 flex justify-between items-center bg-slate-50/30">
+                        <div>
+                            <span class="font-semibold text-slate-800 block">Entered Deposit Amount</span>
+                            <span class="text-[11px] text-slate-400" id="breakdownDepositPctText">(0% of Property Value)</span>
+                        </div>
+                        <span class="font-bold text-slate-900 text-sm" id="breakdownDeposit">$0</span>
+                    </div>
+
+                    <!-- Stamp Duty Row -->
+                    <div class="p-3 flex justify-between items-center">
+                        <div>
+                            <span class="text-slate-600 block">Estimated Stamp Duty</span>
+                            <span class="text-[11px] text-slate-400"><span id="breakdownStateLabel">VIC</span> - <span id="breakdownFhoLabel">FHO Eligible</span></span>
+                        </div>
+                        <span class="font-bold text-slate-900" id="breakdownStampDuty">$0</span>
+                    </div>
+
+                    <!-- LMI Row (Conditional Visibility) -->
+                    <div id="breakdownLmiRow" class="p-3 flex justify-between items-center transition-all">
+                        <div>
+                            <span class="text-slate-600 block">Lenders Mortgage Insurance (LMI)</span>
+                            <span class="text-[11px] text-slate-400" id="lmiSubtext">Required for deposits under 20%</span>
+                        </div>
+                        <span class="font-bold text-slate-900" id="breakdownLmi">$0</span>
+                    </div>
+
+                    <!-- Transfer Fees Row -->
+                    <div class="p-3 flex justify-between items-center">
+                        <span class="text-slate-600">Govt Transfer & Registration Fees (Est.)</span>
+                        <span class="font-bold text-slate-900" id="breakdownTransferFees">$1,650</span>
+                    </div>
+
+                    <!-- Total Upfront Cash Row -->
+                    <div class="p-3.5 flex justify-between items-center bg-slate-100/80 font-semibold border-t-2 border-slate-200">
+                        <div>
+                            <span class="text-slate-900 text-sm font-bold block">Total Upfront Cash Required</span>
+                            <span class="text-[11px] text-slate-500 font-normal">Deposit + Stamp Duty + Fees + LMI (if applicable)</span>
+                        </div>
+                        <span class="font-black text-brand-700 text-lg" id="breakdownTotalUpfront">$0</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ================= EXISTING MORTGAGE MODE ================= -->
+    <div id="hl-existing-view" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+        <!-- Left: Inputs -->
+        <section class="lg:col-span-5 space-y-6">
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <i data-lucide="landmark" class="w-5 h-5 text-qbTeal-500"></i> Current Mortgage
+                </h3>
+
+                <div>
+                    <label for="em-balance" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Current Loan Balance ($)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-sm">$</span>
+                        <input type="number" id="em-balance" value="0" min="0" step="5000" class="em-input w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label for="em-rate" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Rate (% p.a.)</label>
+                        <input type="number" id="em-rate" value="6.00" min="0.1" max="20" step="0.05" class="em-input w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="em-years" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Years Left</label>
+                        <input type="number" id="em-years" value="25" min="0" max="40" step="1" class="em-input w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="em-months" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">+ Months</label>
+                        <input type="number" id="em-months" value="0" min="0" max="11" step="1" class="em-input w-full px-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Repayment Frequency</label>
+                    <div class="grid grid-cols-3 gap-1 p-1 bg-gray-100 rounded-xl" role="group" aria-label="Repayment frequency">
+                        <button type="button" data-emfreq="monthly" class="em-freq-btn py-1.5 rounded-lg text-xs font-bold transition bg-qbNavy-600 text-white">Monthly</button>
+                        <button type="button" data-emfreq="fortnightly" class="em-freq-btn py-1.5 rounded-lg text-xs font-bold transition text-gray-600 hover:bg-white">Fortnightly</button>
+                        <button type="button" data-emfreq="weekly" class="em-freq-btn py-1.5 rounded-lg text-xs font-bold transition text-gray-600 hover:bg-white">Weekly</button>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="em-repayment" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Current Repayment per Period ($)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-sm">$</span>
+                        <input type="number" id="em-repayment" value="" min="0" step="10" placeholder="Leave blank to use the minimum" class="em-input w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                    <p class="text-[11px] text-gray-500 mt-1">Minimum repayment: <strong id="em-min-repay" class="text-gray-700">$0</strong>. Enter a higher figure if you already pay more.</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+                <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <i data-lucide="piggy-bank" class="w-5 h-5 text-qbTeal-500"></i> Savings Strategies
+                </h3>
+
+                <!-- Extra repayments -->
+                <div class="rounded-xl border border-gray-200 overflow-hidden">
+                    <div class="flex items-center justify-between p-3.5 bg-gray-50">
+                        <div>
+                            <span class="flex items-center gap-2 text-sm font-bold text-gray-800"><span class="w-3 h-3 rounded-full inline-block" style="background:#2563eb"></span> Extra Repayments</span>
+                            <span class="text-xs text-gray-500">Pay more than the scheduled amount</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="em-extra-toggle" checked class="em-input sr-only peer">
+                            <div class="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                        </label>
+                    </div>
+                    <div id="em-extra-fields" class="p-3.5 border-t border-gray-200">
+                        <label for="em-extra" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Extra per Repayment ($)</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-sm">$</span>
+                            <input type="number" id="em-extra" value="0" min="0" step="50" class="em-input w-full pl-7 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Offset account -->
+                <div class="rounded-xl border border-gray-200 overflow-hidden">
+                    <div class="flex items-center justify-between p-3.5 bg-gray-50">
+                        <div>
+                            <span class="flex items-center gap-2 text-sm font-bold text-gray-800"><span class="w-3 h-3 rounded-full inline-block" style="background:#d97706"></span> Offset Account</span>
+                            <span class="text-xs text-gray-500">Savings balance reduces interest charged</span>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="em-offset-toggle" checked class="em-input sr-only peer">
+                            <div class="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                        </label>
+                    </div>
+                    <div id="em-offset-fields" class="p-3.5 border-t border-gray-200 grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="em-offset" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Offset Balance ($)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-sm">$</span>
+                                <input type="number" id="em-offset" value="0" min="0" step="1000" class="em-input w-full pl-7 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="em-offset-topup" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Added per Period ($)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-sm">$</span>
+                                <input type="number" id="em-offset-topup" value="0" min="0" step="50" class="em-input w-full pl-7 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-500">Assumes a 100% offset, a constant rate, and interest charged each repayment period. Lenders calculate interest daily, so actual results vary slightly.</p>
+            </div>
+        </section>
+
+        <!-- Right: Results -->
+        <div class="lg:col-span-7 space-y-6">
+            <div class="bg-gradient-to-br from-qbNavy-600 via-qbNavy-700 to-qbNavy-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+                <div class="absolute -right-8 -bottom-8 opacity-10"><i data-lucide="trending-down" class="w-48 h-48"></i></div>
+                <div class="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <span id="em-hero-label" class="text-xs uppercase tracking-widest text-qbTeal-400 font-bold">Total Interest Saved</span>
+                        <h3 id="em-hero-saved" class="text-4xl sm:text-5xl font-extrabold tracking-tight mt-1">$0</h3>
+                        <p id="em-hero-sub" class="text-xs text-blue-200 mt-1">—</p>
+                    </div>
+                    <div class="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 w-full sm:w-auto text-center sm:text-right">
+                        <span class="text-xs text-gray-300 block font-medium">Time Off Loan</span>
+                        <span id="em-hero-time" class="text-2xl font-black text-qbTeal-400">0 yrs 0 mos</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="em-warning" class="hidden p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-800 flex items-start gap-2">
+                <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5"></i><span id="em-warning-text"></span>
+            </div>
+
+            <!-- Scenario comparison -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
+                <h3 class="text-base font-bold text-qbNavy-600 border-b border-gray-100 pb-3">Scenario Comparison</h3>
+                <div class="overflow-x-auto rounded-xl border border-gray-200">
+                    <table class="w-full text-left text-xs sm:text-sm">
+                        <thead>
+                            <tr class="bg-qbNavy-600 text-white text-xs uppercase tracking-wider">
+                                <th class="py-2.5 px-3 font-semibold">Scenario</th>
+                                <th class="py-2.5 px-3 font-semibold text-right">Paid Off In</th>
+                                <th class="py-2.5 px-3 font-semibold text-right">Interest Remaining</th>
+                                <th class="py-2.5 px-3 font-semibold text-right">Interest Saved</th>
+                                <th class="py-2.5 px-3 font-semibold text-right">Time Saved</th>
+                            </tr>
+                        </thead>
+                        <tbody id="em-table-body" class="divide-y divide-gray-100"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Trajectory chart -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <h3 class="text-base font-bold text-qbNavy-600">Net Debt Over Time</h3>
+                        <p class="text-[11px] text-gray-500">Loan balance less offset balance. Hover for values.</p>
+                    </div>
+                    <div id="em-legend" class="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-gray-700"></div>
+                </div>
+                <div id="em-chart-wrap" class="relative w-full">
+                    <svg id="em-chart" viewBox="0 0 600 240" class="w-full h-auto" role="img" aria-label="Net debt over time by scenario"></svg>
+                    <div id="em-tooltip" class="hidden absolute pointer-events-none bg-slate-900 text-white text-[11px] rounded-lg px-3 py-2 shadow-lg z-10 min-w-[170px]"></div>
+                </div>
+            </div>
+
+            <!-- Offset insight -->
+            <div id="em-offset-insight" class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-3">
+                <h3 class="text-base font-bold text-qbNavy-600 flex items-center gap-2"><i data-lucide="lightbulb" class="w-5 h-5 text-qbTeal-500"></i> Offset vs Investing</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                        <span class="text-xs text-gray-500 font-semibold block uppercase">Tax-free return</span>
+                        <span id="em-offset-return" class="text-xl font-black text-qbNavy-600">0%</span>
+                        <span class="text-[11px] text-gray-500 block">Equal to your loan rate</span>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                        <span class="text-xs text-gray-500 font-semibold block uppercase">Pre-tax equivalent</span>
+                        <span id="em-offset-pretax" class="text-xl font-black text-qbNavy-600">0%</span>
+                        <span id="em-offset-marginal" class="text-[11px] text-gray-500 block">At your marginal rate</span>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                        <span class="text-xs text-gray-500 font-semibold block uppercase">Year-one interest saved</span>
+                        <span id="em-offset-y1" class="text-xl font-black text-emerald-600">$0</span>
+                        <span class="text-[11px] text-gray-500 block">From the offset alone</span>
+                    </div>
+                </div>
+                <p class="text-[11px] text-gray-500">An investment would need to earn the pre-tax equivalent to beat keeping cash in the offset. The marginal rate (plus 2% Medicare levy) comes from the Income Tax Calculator tab.</p>
+            </div>
+        </div>
+    </div>
+</div>

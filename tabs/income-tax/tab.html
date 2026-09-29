@@ -1,0 +1,682 @@
+<div id="view-income-tax" class="space-y-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+        <!-- LEFT COLUMN: INPUT CONTROLS (5 COLS) -->
+        <div class="lg:col-span-5 space-y-6 no-print">
+
+            <!-- Card 1: Year & Individual Base Salary -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+                <h2 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <i data-lucide="calendar" class="w-5 h-5 text-qbTeal-500"></i> Tax Year & Individual Income
+                </h2>
+
+                <div>
+                    <label for="fy-select" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Financial Year</label>
+                    <select id="fy-select" onchange="calculateTax()" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 focus:border-qbNavy-500 p-3 font-semibold cursor-pointer">
+                        <option value="2027" selected>2026 - 2027 (FY27)</option>
+                        <option value="2026">2025 - 2026 (FY26)</option>
+                        <option value="2025">2024 - 2025 (FY25)</option>
+                        <option value="2024">2023 - 2024 (FY24)</option>
+                        <option value="2023">2022 - 2023 (FY23)</option>
+                        <option value="2022">2021 - 2022 (FY22)</option>
+                        <option value="2021">2020 - 2021 (FY21)</option>
+                        <option value="2020">2019 - 2020 (FY20)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="gross-salary" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Individual Base Salary ($)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-500 font-bold">$</span>
+                        <input type="number" id="gross-salary" value="0" step="1000" min="0" oninput="calculateTax()" class="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 font-bold text-lg focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Card 2: Dividends & Imputation Credits -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+                <h2 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <i data-lucide="pie-chart" class="w-5 h-5 text-qbTeal-500"></i> Dividend Income & Franking Credits
+                </h2>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="dividend-franked" class="block text-xs font-semibold text-gray-700 mb-1">Franked Dividends ($)</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                            <input type="number" id="dividend-franked" value="0" min="0" step="100" oninput="calculateTax()" class="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold">
+                        </div>
+                    </div>
+                    <div>
+                        <label for="dividend-unfranked" class="block text-xs font-semibold text-gray-700 mb-1">Unfranked Dividends ($)</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                            <input type="number" id="dividend-unfranked" value="0" min="0" step="100" oninput="calculateTax()" class="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Company Tax Rate Slider for Franking Gross-up -->
+                <div class="p-3.5 bg-blue-50/70 rounded-xl border border-blue-100 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label for="company-tax-rate" class="text-xs font-bold text-qbNavy-600 uppercase tracking-wider">Company Tax Rate (Franking Rate)</label>
+                        <span id="company-rate-val" class="text-sm font-extrabold text-qbNavy-600 bg-white px-2 py-0.5 rounded border border-blue-200">30%</span>
+                    </div>
+                    <input type="range" id="company-tax-rate" min="25" max="30" step="5" value="30" oninput="updateCompanyRateLabel(); calculateTax();" class="w-full accent-qbNavy-600 cursor-pointer">
+                    <div class="flex justify-between text-[11px] text-gray-500 font-semibold">
+                        <span>25% (Base Rate Entity)</span>
+                        <span>30% (Standard Corporate Rate)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 3: Family Health, Dependents & HECS Settings -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+                <h2 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <i data-lucide="users" class="w-5 h-5 text-qbTeal-500"></i> Spouse, Fringe Benefits, MLS & HECS
+                </h2>
+
+                <!-- Has Spouse Toggle -->
+                <div class="flex items-center justify-between p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                    <div>
+                        <span class="block text-sm font-bold text-indigo-950">Has Spouse</span>
+                        <span class="text-xs text-indigo-800">Applies family thresholds for Medicare Levy, MLS & SAPTO</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="has-spouse-toggle" onchange="toggleSpouseSection(); calculateTax();" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                    </label>
+                </div>
+
+                <!-- Spouse Income & Dependent Children Inputs (Revealed when Has Spouse toggle is ON) -->
+                <div id="spouse-details-container" class="hidden p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label for="spouse-salary" class="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">Spouse Income ($)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 font-bold">$</span>
+                                <input type="number" id="spouse-salary" value="0" min="0" step="1000" oninput="calculateTax()" class="w-full pl-8 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label for="dependent-children" class="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">Dependent Children</label>
+                            <div class="relative">
+                                <input type="number" id="dependent-children" value="0" min="0" max="15" step="1" oninput="calculateTax()" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-center">
+                            </div>
+                        </div>
+                    </div>
+                    <p class="text-[11px] text-gray-600">ATO Rule: Family MLS threshold increases by <strong>$1,500 for each child after the first</strong>.</p>
+                </div>
+
+                <!-- Reportable Fringe Benefits -->
+                <div class="p-3.5 bg-blue-50/70 rounded-xl border border-blue-100 space-y-2">
+                    <label for="rfba-input" class="block text-xs font-bold text-qbNavy-600 uppercase tracking-wider">Reportable Fringe Benefits Amount ($)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 font-bold">$</span>
+                        <input type="number" id="rfba-input" value="0" step="500" min="0" oninput="calculateTax()" class="w-full pl-8 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-900 focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                    </div>
+                    <p class="text-[11px] text-gray-600">Grossed-up RFBA from the income statement. Not taxed, but counts towards MLS, SAPTO, HELP repayment income and Division 293 income.</p>
+                </div>
+
+                <!-- Private Health Insurance (MLS) -->
+                <div class="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                        <span class="block text-sm font-bold text-gray-800">Private Hospital Cover</span>
+                        <span class="text-xs text-gray-500">Exempts Medicare Levy Surcharge (MLS)</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="phi-toggle" checked onchange="calculateTax()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                    </label>
+                </div>
+
+                <!-- HECS / HELP Debt Toggle -->
+                <div class="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                        <span class="block text-sm font-bold text-gray-800">HECS / HELP Debt</span>
+                        <span class="text-xs text-gray-500">Calculate compulsory repayments</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="hecs-toggle" onchange="calculateTax()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                    </label>
+                </div>
+
+                <!-- Concessional Contribution Input (Salary Sacrifice / Personal Deductible) -->
+                <div class="p-4 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-2.5">
+                    <div class="grid grid-cols-2 gap-1 p-1 bg-white rounded-xl border border-emerald-200" role="group" aria-label="Contribution type">
+                        <button type="button" id="ctype-sacrifice" onclick="setContributionType('sacrifice')" class="ctype-btn py-1.5 rounded-lg text-xs font-bold transition bg-emerald-600 text-white">Salary Sacrifice</button>
+                        <button type="button" id="ctype-personal" onclick="setContributionType('personal')" class="ctype-btn py-1.5 rounded-lg text-xs font-bold transition text-emerald-900 hover:bg-emerald-50">Personal Deductible</button>
+                    </div>
+                    <label for="salary-sacrifice" id="contrib-label" class="block text-xs font-bold text-emerald-900 uppercase tracking-wider">Salary Sacrifice Super ($/year)</label>
+                    <div class="relative">
+                        <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 font-bold">$</span>
+                        <input type="number" id="salary-sacrifice" value="0" min="0" step="500" oninput="calculateTax()" class="w-full pl-8 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <p id="contrib-help" class="text-[11px] text-gray-600">Paid from pre-tax salary by your employer. Reduces taxable income and is taxed at 15% inside super.</p>
+                </div>
+
+            </div>
+
+            <!-- Card 4: Age & Seniors Tax Offset (SAPTO) - Positioned below Spouse & MLS -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+                <h2 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                    <i data-lucide="award" class="w-5 h-5 text-qbTeal-500"></i> Age & Seniors / Pensioners Offset (SAPTO)
+                </h2>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="dob-input" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Date of Birth</label>
+                        <input type="date" id="dob-input" onchange="calculateTax()" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-qbNavy-500">
+                    </div>
+                    <div class="p-2.5 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col justify-center">
+                        <span class="text-[11px] font-bold text-qbNavy-600 uppercase">Age at <span id="age-at-fy">30 June 2027</span></span>
+                        <span id="calc-age-display" class="text-xl font-extrabold text-qbNavy-600">—</span>
+                    </div>
+                </div>
+
+                <!-- Govt Pension Eligibility Check -->
+                <div class="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-800">Govt Pension / Allowance Entitlement</span>
+                        <span class="text-[11px] text-gray-500">Age Pension, DVA, or allowance eligible</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="pension-eligible-toggle" onchange="calculateTax()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                    </label>
+                </div>
+
+                <!-- SAPTO Relationship Category Dropdown -->
+                <div>
+                    <label for="sapto-category" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">SAPTO Relationship Status</label>
+                    <select id="sapto-category" onchange="calculateTax()" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 p-2.5 font-semibold cursor-pointer">
+                        <option value="single">Single</option>
+                        <option value="couple_together" selected>Couple (living together)</option>
+                        <option value="couple_illness">Couple (separated due to illness / care)</option>
+                        <option value="both_eligible">Both eligible in a couple</option>
+                    </select>
+                </div>
+
+                <!-- Spouse SAPTO eligibility (needed for unused offset transfer) -->
+                <div id="spouse-sapto-wrap" class="hidden flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                    <div>
+                        <span class="block text-xs font-bold text-gray-800">Spouse Also Eligible for SAPTO</span>
+                        <span id="spouse-sapto-help" class="text-[11px] text-gray-500">Only then can their unused offset transfer to you</span>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="spouse-sapto-toggle" onchange="calculateTax()" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                    </label>
+                </div>
+
+                <div id="sapto-eligibility-status" class="p-3 rounded-xl border text-xs"></div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT COLUMN: RESULTS & BREAKDOWN (7 COLS) -->
+        <div class="lg:col-span-7 space-y-6 print-full">
+
+            <!-- Take Home Pay Card -->
+            <div class="bg-gradient-to-br from-qbNavy-600 via-qbNavy-700 to-qbNavy-800 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
+                <div class="absolute -right-8 -bottom-8 opacity-10">
+                    <i data-lucide="wallet" class="w-48 h-48"></i>
+                </div>
+                <div class="relative z-10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                        <span class="text-xs uppercase tracking-widest text-qbTeal-400 font-bold">Individual Annual Take-Home Pay</span>
+                        <h3 id="res-net-annual" class="text-4xl sm:text-5xl font-extrabold tracking-tight mt-1 text-white">$0</h3>
+                        <p class="text-xs text-blue-200 mt-1">In your bank account after Income Tax, Levies & HECS</p>
+                        <p id="res-refund-note" class="hidden text-xs text-qbTeal-400 mt-1 font-semibold"></p>
+                    </div>
+                    <div class="bg-white/10 backdrop-blur-md rounded-xl p-3.5 border border-white/10 w-full sm:w-auto text-center sm:text-right">
+                        <span class="text-xs text-gray-300 block font-medium">Effective Tax Rate</span>
+                        <span id="res-effective-rate" class="text-2xl font-black text-qbTeal-400">0.0%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pay Frequency Grid -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Weekly</span>
+                    <span id="freq-weekly" class="text-lg font-extrabold text-qbNavy-600">$0</span>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Fortnightly</span>
+                    <span id="freq-fortnightly" class="text-lg font-extrabold text-qbNavy-600">$0</span>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Monthly</span>
+                    <span id="freq-monthly" class="text-lg font-extrabold text-qbNavy-600">$0</span>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <span class="text-xs text-gray-500 font-semibold block uppercase tracking-wider">Annual</span>
+                    <span id="freq-annual" class="text-lg font-extrabold text-qbNavy-600">$0</span>
+                </div>
+            </div>
+
+            <!-- Detailed Breakdown Table & Visualization -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-6">
+                <div class="flex justify-between items-center border-b border-gray-100 pb-3">
+                    <h3 class="text-base font-bold text-qbNavy-600">Tax Breakdown Summary</h3>
+                    <span id="current-fy-badge" class="text-xs font-bold bg-blue-50 text-qbNavy-600 px-3 py-1 rounded-full border border-blue-100">FY 2026-2027</span>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                    <!-- Chart SVG (5 cols) -->
+                    <div class="md:col-span-5 flex flex-col items-center justify-center p-2">
+                        <svg id="donut-chart" viewBox="0 0 100 100" class="w-44 h-44 transform -rotate-90">
+                            <!-- Dynamic JS paths -->
+                        </svg>
+                        <div class="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4 text-xs font-semibold text-gray-600">
+                            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block"></span> Take Home</span>
+                            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span> Base Tax</span>
+                            <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 inline-block"></span> Medicare</span>
+                            <span id="chart-legend-hecs" class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> HECS</span>
+                        </div>
+                    </div>
+
+                    <!-- Itemized Lines (7 cols) -->
+                    <div class="md:col-span-7 space-y-2.5 text-sm">
+                        <div class="flex justify-between py-1 border-b border-gray-100">
+                            <span class="text-gray-600">Base Salary</span>
+                            <span id="res-base-salary" class="font-bold text-gray-900">$0</span>
+                        </div>
+
+                        <div id="rfba-row" class="hidden flex justify-between py-1 border-b border-gray-100 text-xs text-gray-500">
+                            <span>Reportable Fringe Benefits <span class="italic">(not taxable — income tests only)</span></span>
+                            <span id="res-rfba" class="font-semibold text-qbNavy-600">$0</span>
+                        </div>
+
+                        <!-- Dividend Lines -->
+                        <div id="div-summary-row" class="hidden space-y-1 bg-gray-50 p-2.5 rounded-lg border border-gray-100 text-xs">
+                            <div class="flex justify-between text-gray-600">
+                                <span>Cash Dividends (Franked + Unfranked):</span>
+                                <span id="res-div-cash" class="font-semibold text-gray-800">$0</span>
+                            </div>
+                            <div class="flex justify-between text-gray-600">
+                                <span>Franking Credits (Gross-Up):</span>
+                                <span id="res-div-franking" class="font-semibold text-blue-600">+$0</span>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between py-1 border-b border-gray-100 font-bold text-qbNavy-600">
+                            <span>Total Individual Taxable Income</span>
+                            <span id="res-taxable-income">$0</span>
+                        </div>
+
+                        <div class="flex justify-between py-1 border-b border-gray-100">
+                            <span class="text-gray-600">Gross Income Tax</span>
+                            <span id="res-gross-tax" class="font-semibold text-red-600">$0</span>
+                        </div>
+
+                        <div id="lito-row" class="flex justify-between py-1 border-b border-gray-100 text-emerald-700">
+                            <span>Low Income Tax Offset (LITO / LMITO)</span>
+                            <span id="res-lito-offset" class="font-semibold">-$0</span>
+                        </div>
+
+                        <!-- Dynamic SAPTO Row (Only displayed when applicable) -->
+                        <div id="sapto-row" class="hidden flex justify-between py-1 border-b border-gray-100 text-teal-700 font-medium">
+                            <div>
+                                <span class="block">Seniors & Pensioners Offset (SAPTO)</span>
+                                <span id="sapto-sub-text" class="text-[11px] text-gray-500 block"></span>
+                            </div>
+                            <span id="res-sapto-offset" class="font-semibold">-$0</span>
+                        </div>
+
+                        <div id="franking-offset-row" class="flex justify-between py-1 border-b border-gray-100 text-blue-700 font-medium">
+                            <span>Franking Credit Refundable Offset</span>
+                            <span id="res-franking-offset">-$0</span>
+                        </div>
+
+                        <div class="flex justify-between py-1 border-b border-gray-100">
+                            <span class="text-gray-600">Medicare Levy (2%)</span>
+                            <span id="res-medicare" class="font-semibold text-amber-600">$0</span>
+                        </div>
+
+                        <div id="mls-row" class="flex justify-between py-1 border-b border-gray-100 text-amber-700">
+                            <div>
+                                <span id="mls-label-text" class="block font-semibold">Medicare Levy Surcharge (MLS)</span>
+                                <span id="mls-sub-text" class="text-[11px] text-gray-500 block">Family Threshold Tier Applied</span>
+                            </div>
+                            <span id="res-mls" class="font-semibold">$0</span>
+                        </div>
+
+                        <div id="hecs-row" class="flex justify-between py-1 border-b border-gray-100 text-purple-700">
+                            <div>
+                                <span class="block">HECS / HELP Repayment</span>
+                                <span id="res-hecs-income" class="text-[11px] text-gray-500 block">Repayment income $0</span>
+                            </div>
+                            <span id="res-hecs" class="font-semibold">$0</span>
+                        </div>
+
+                        <div class="flex justify-between py-2 font-black text-gray-900 text-base border-t-2 border-gray-200">
+                            <span id="res-total-tax-label">Net Tax & Levies Payable</span>
+                            <span id="res-total-tax" class="text-red-600">$0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Superannuation & Salary Sacrifice Breakdown -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-4">
+                <h3 class="text-base font-bold text-qbNavy-600 border-b border-gray-100 pb-3 flex items-center justify-between">
+                    <span class="flex items-center gap-2">
+                        <i data-lucide="vault" class="w-5 h-5 text-qbTeal-500"></i> Superannuation & Salary Sacrifice Breakdown
+                    </span>
+                    <span id="res-sg-rate-badge" class="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-100">SG Rate: 12.0%</span>
+                </h3>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                        <span class="text-xs text-gray-500 font-semibold block uppercase">Employer SG Contribution</span>
+                        <span id="res-employer-super" class="text-xl font-black text-qbNavy-600">$0</span>
+                        <span class="text-[11px] text-gray-500 block mt-0.5">Paid by employer on base salary</span>
+                    </div>
+                    <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                        <span class="text-xs text-gray-500 font-semibold block uppercase">Marginal Tax Bracket</span>
+                        <span id="res-marginal-rate" class="text-xl font-black text-qbNavy-600">0.0%</span>
+                        <span class="text-[11px] text-gray-500 block mt-0.5">Top rate applied to next $1 earned</span>
+                    </div>
+                </div>
+
+                <!-- Concessional Cap Check -->
+                <div class="p-4 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-gray-800 uppercase tracking-wider">Concessional Cap Used</span>
+                        <span class="text-gray-600"><strong id="cap-used" class="text-gray-900">$0</strong> of <span id="cap-total">$0</span></span>
+                    </div>
+                    <div class="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden" role="progressbar" aria-label="Concessional cap used">
+                        <div id="cap-bar" class="h-full rounded-full bg-qbTeal-500 transition-all duration-300" style="width:0%"></div>
+                    </div>
+                    <div class="flex justify-between text-[11px] text-gray-500">
+                        <span>Employer SG <strong id="cap-sg" class="text-gray-700">$0</strong> + <span id="cap-contrib-label">salary sacrifice</span> <strong id="cap-contrib" class="text-gray-700">$0</strong></span>
+                        <span id="cap-remaining" class="font-semibold text-gray-700">$0 remaining</span>
+                    </div>
+                </div>
+
+                <!-- Carry-forward concessional cap checker -->
+                <div class="flex justify-end -mt-1 no-print">
+                    <button type="button" onclick="toggleCarryForward()" class="text-xs font-semibold text-qbNavy-600 hover:text-qbNavy-700 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-qbNavy-100 bg-qbNavy-50 hover:bg-blue-100 transition">
+                        <i data-lucide="history" class="w-3.5 h-3.5"></i> <span id="cf-toggle-text">Check carry-forward eligibility</span>
+                    </button>
+                </div>
+
+                <div id="cf-body" class="hidden p-4 bg-blue-50/60 rounded-xl border border-blue-200 space-y-4 text-xs">
+                    <div class="flex items-center justify-between border-b border-blue-200 pb-2">
+                        <span class="font-bold text-qbNavy-600 text-sm flex items-center gap-1.5"><i data-lucide="history" class="w-4 h-4 text-qbTeal-500"></i> Carry-Forward Concessional Contributions</span>
+                        <span class="text-[11px] text-gray-500">Applied to the cap check while open</span>
+                    </div>
+
+                    <div>
+                        <label for="cf-tsb" id="cf-tsb-label" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Total Super Balance at 30 June</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                            <input type="number" id="cf-tsb" value="250000" min="0" step="5000" oninput="calculateTax()" class="w-full pl-7 pr-3 py-2 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                        </div>
+                        <span class="text-[11px] text-gray-500 block mt-1">Must be under $500,000 at the end of the previous financial year.</span>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-lg border border-blue-200 bg-white">
+                        <table class="w-full text-left text-xs">
+                            <thead>
+                                <tr class="bg-qbNavy-600 text-white uppercase tracking-wider text-[10px]">
+                                    <th class="py-2 px-2.5">Year</th>
+                                    <th class="py-2 px-2.5 text-right">Cap</th>
+                                    <th class="py-2 px-2.5">Concessional Contribs</th>
+                                    <th class="py-2 px-2.5 text-right">Unused Left</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cf-rows" class="divide-y divide-gray-100"></tbody>
+                        </table>
+                    </div>
+
+                    <div>
+                        <label for="cf-ato" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">ATO-Reported Available Amount (optional override)</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                            <input type="number" id="cf-ato" value="" min="0" step="100" placeholder="From ATO online services / myGov" oninput="calculateTax()" class="w-full pl-7 pr-3 py-2 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div id="cf-result" class="p-3 rounded-xl border space-y-1.5"></div>
+                    <p class="text-[11px] text-gray-500">Unused cap amounts from 2018-19 onwards can be carried forward for up to 5 years and are used oldest first. The ATO figure in online services is authoritative.</p>
+                </div>
+
+                <div id="cap-excess-box" class="hidden p-4 bg-red-50 rounded-xl border border-red-200 text-xs space-y-1.5">
+                    <div class="flex items-center gap-1.5 font-bold text-red-800 text-sm">
+                        <i data-lucide="alert-octagon" class="w-4 h-4 text-red-600"></i> Concessional Cap Exceeded
+                    </div>
+                    <div class="flex justify-between text-gray-700"><span>Excess concessional contributions:</span><span id="cap-excess" class="font-bold text-red-700">$0</span></div>
+                    <div class="flex justify-between text-gray-700"><span>Est. extra tax (marginal rate less 15% offset):</span><span id="cap-excess-tax" class="font-bold text-red-700">$0</span></div>
+                    <p class="text-[11px] text-gray-600">The excess is added to assessable income and taxed at marginal rates, with a 15% non-refundable offset for contributions tax already paid. You can elect to release up to 85% of the excess from super. Use "Check carry-forward eligibility" to see if unused cap amounts cover this. Not included in the take-home figures above.</p>
+                </div>
+
+                <!-- Salary Sacrifice Analysis Box -->
+                <div id="super-sac-detail-box" class="hidden bg-emerald-50/70 rounded-xl p-5 border border-emerald-200 space-y-3">
+                    <div class="flex items-center justify-between border-b border-emerald-200/80 pb-2">
+                        <span class="font-extrabold text-emerald-900 text-sm flex items-center gap-1.5">
+                            <i data-lucide="trending-up" class="w-4 h-4 text-emerald-600"></i> <span id="sac-box-title">Salary Sacrifice Impact Analysis</span>
+                        </span>
+                        <span id="sac-box-badge" class="text-xs font-bold text-emerald-800 bg-emerald-200/60 px-2.5 py-0.5 rounded-full">Pre-tax Super</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-gray-700">
+                                <span id="sac-amount-label">Amount Sacrificed:</span>
+                                <span id="sac-amount" class="font-bold text-gray-900">$0</span>
+                            </div>
+                            <div class="flex justify-between text-gray-700">
+                                <span>Income Tax & Levies Saved:</span>
+                                <span id="sac-tax-saved" class="font-bold text-emerald-700">+$0</span>
+                            </div>
+                            <div class="flex justify-between text-gray-700">
+                                <span id="sac-fund-tax-label">Super Contributions Tax (15%):</span>
+                                <span id="sac-fund-tax" class="font-bold text-red-600">-$0</span>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1.5 border-t sm:border-t-0 sm:border-l border-emerald-200/80 pt-2 sm:pt-0 sm:pl-3">
+                            <div class="flex justify-between text-gray-700">
+                                <span>Tax Saved After Contributions Tax:</span>
+                                <span id="sac-net-tax-save" class="font-bold text-emerald-700">$0</span>
+                            </div>
+                            <div class="flex justify-between text-gray-700">
+                                <span id="sac-takehome-label">Take-Home Pay Reduced By:</span>
+                                <span id="sac-takehome-drop" class="font-bold text-amber-700">-$0</span>
+                            </div>
+                            <div class="flex justify-between text-gray-900 font-extrabold text-sm pt-1 border-t border-emerald-300">
+                                <span>Net Wealth Increase:</span>
+                                <span id="sac-net-benefit" class="text-emerald-800">+$0</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="personal-deduct-note" class="hidden p-3 bg-white rounded-lg border border-emerald-200 text-[11px] text-gray-700 space-y-1">
+                        <div class="flex justify-between"><span>Contribution paid from savings (not from take-home pay):</span><strong id="pd-paid">$0</strong></div>
+                        <div class="flex justify-between"><span>Tax saving from the deduction (at lodgement):</span><strong id="pd-refund" class="text-emerald-700">$0</strong></div>
+                        <p class="text-gray-500 pt-1 border-t border-gray-100">Requires a valid notice of intent to claim a deduction, acknowledged by the fund before lodging (and before any rollover or withdrawal). Age 67–74 must meet the work test.</p>
+                    </div>
+                    <p id="sac-summary" class="text-[11px] text-emerald-800 italic"></p>
+                </div>
+
+            </div>
+
+            <!-- Division 293 Calculator (collapsible) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <button type="button" onclick="toggleDiv293()" class="w-full px-6 py-4 flex items-center justify-between gap-3 hover:bg-gray-50 transition text-left">
+                    <span class="flex items-center gap-2">
+                        <i data-lucide="percent" class="w-5 h-5 text-qbTeal-500"></i>
+                        <span>
+                            <span class="block text-base font-bold text-qbNavy-600">Division 293 – High Income Super Tax</span>
+                            <span class="block text-[11px] text-gray-500">Extra 15% on concessional contributions when Div 293 income exceeds $250,000</span>
+                        </span>
+                    </span>
+                    <span class="flex items-center gap-2 flex-shrink-0">
+                        <span id="div293-badge" class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">Not applicable</span>
+                        <span class="flex items-center gap-2 text-xs font-semibold text-qbNavy-600 no-print">
+                            <span id="div293-toggle-text" class="hidden sm:inline">Show calculation</span>
+                            <svg id="div293-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        </span>
+                    </span>
+                </button>
+
+                <div id="div293-body" class="hidden border-t border-gray-100 p-6 space-y-5">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                        <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-1.5">
+                            <h4 class="font-bold text-qbNavy-600 border-b border-gray-200 pb-1.5">Step 1: Div 293 Income</h4>
+                            <div class="flex justify-between"><span>Taxable income:</span><span id="d293-ti" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between"><span>+ Reportable fringe benefits:</span><span id="d293-rfba" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between"><span>+ Net investment losses:</span><span class="font-semibold text-gray-400">not modelled</span></div>
+                            <div class="flex justify-between pt-1 border-t border-gray-200"><span>Income for surcharge purposes*:</span><span id="d293-isp" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between"><span>+ Low-tax contributions:</span><span id="d293-ltc" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between pt-1 border-t border-gray-200 font-bold text-qbNavy-600"><span>Division 293 income:</span><span id="d293-income">$0</span></div>
+                        </div>
+                        <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-1.5">
+                            <h4 class="font-bold text-qbNavy-600 border-b border-gray-200 pb-1.5">Step 2: Taxable Contributions</h4>
+                            <div class="flex justify-between"><span>Div 293 threshold:</span><span id="d293-threshold" class="font-semibold">$250,000</span></div>
+                            <div class="flex justify-between"><span>Amount over threshold:</span><span id="d293-over" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between"><span>Low-tax contributions:</span><span id="d293-ltc2" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between pt-1 border-t border-gray-200 font-bold text-qbNavy-600"><span>Taxable contributions (lesser of):</span><span id="d293-taxable">$0</span></div>
+                            <div class="flex justify-between"><span>× Div 293 rate:</span><span class="font-semibold">15%</span></div>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-gray-700 space-y-1">
+                        <div class="flex justify-between"><span>Low-tax contributions = SG <strong id="d293-sg">$0</strong> + <span id="d293-contrib-label">salary sacrifice</span> <strong id="d293-contrib">$0</strong></span><span>less excess <strong id="d293-excess">$0</strong></span></div>
+                        <p class="text-gray-500">*Excludes reportable super contributions. Excess concessional contributions are not low-tax contributions.</p>
+                    </div>
+
+                    <div class="bg-gradient-to-br from-qbNavy-600 to-qbNavy-800 rounded-xl p-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                            <span class="text-xs uppercase tracking-widest text-qbTeal-400 font-bold">Estimated Division 293 Tax</span>
+                            <div id="d293-tax" class="text-3xl font-extrabold">$0</div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[11px] text-blue-200 block">Total tax on concessional contributions</span>
+                            <span id="d293-eff" class="text-lg font-black text-qbTeal-400">15%</span>
+                        </div>
+                    </div>
+
+                    <div id="d293-status" class="p-3 rounded-xl border text-xs"></div>
+                    <p class="text-[11px] text-gray-500">Assessed separately from the income tax return (not included in take-home pay above). Can be paid personally or released from super with a release authority. Defined benefit interests may be deferred.</p>
+                </div>
+            </div>
+
+            <!-- Division 296 Calculator (collapsible) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <button type="button" onclick="toggleDiv296()" class="w-full px-6 py-4 flex items-center justify-between gap-3 hover:bg-gray-50 transition text-left">
+                    <span class="flex items-center gap-2">
+                        <i data-lucide="landmark" class="w-5 h-5 text-qbTeal-500"></i>
+                        <span>
+                            <span class="block text-base font-bold text-qbNavy-600">Division 296 – Super Balances Above $3m</span>
+                            <span class="block text-[11px] text-gray-500">Additional tax on earnings for large total super balances (from 1 July 2026)</span>
+                        </span>
+                    </span>
+                    <span class="flex items-center gap-2 text-xs font-semibold text-qbNavy-600 flex-shrink-0 no-print">
+                        <span id="div296-toggle-text">Show calculation</span>
+                        <svg id="div296-chevron" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </span>
+                </button>
+
+                <div id="div296-body" class="hidden border-t border-gray-100 p-6 space-y-5">
+                    <div id="div296-na" class="hidden p-3 rounded-xl border bg-gray-50 border-gray-200 text-xs text-gray-700"></div>
+
+                    <div id="div296-content" class="space-y-5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div id="div296-start-wrap">
+                                <label for="div296-tsb-start" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">TSB at 1 July ($)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                                    <input type="number" id="div296-tsb-start" value="3500000" min="0" step="10000" oninput="calculateDiv296()" class="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                                </div>
+                                <span id="div296-start-note" class="text-[11px] text-gray-500 block mt-1"></span>
+                            </div>
+                            <div>
+                                <label for="div296-tsb-end" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">TSB at 30 June ($)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                                    <input type="number" id="div296-tsb-end" value="4000000" min="0" step="10000" oninput="calculateDiv296()" class="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                                </div>
+                                <span class="text-[11px] text-gray-500 block mt-1">Total superannuation balance across all funds</span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label for="div296-earnings-mode" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Division 296 Earnings Basis</label>
+                            <select id="div296-earnings-mode" onchange="calculateDiv296()" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 p-2.5 font-semibold cursor-pointer">
+                                <option value="realised" selected>Realised earnings (as reported by fund / ATO)</option>
+                                <option value="estimate">Estimate from balance movement</option>
+                            </select>
+                        </div>
+
+                        <div id="div296-realised-wrap">
+                            <label for="div296-earnings" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Realised Div 296 Earnings ($)</label>
+                            <div class="relative">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                                <input type="number" id="div296-earnings" value="200000" step="1000" oninput="calculateDiv296()" class="w-full pl-7 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                            </div>
+                            <span class="text-[11px] text-gray-500 block mt-1">Fund-level realised earnings attributed to the member (excludes contributions and unrealised gains).</span>
+                        </div>
+
+                        <div id="div296-estimate-wrap" class="hidden p-3.5 bg-blue-50/70 rounded-xl border border-blue-100 space-y-2 text-xs">
+                            <div>
+                                <label for="div296-withdrawals" class="block text-xs font-bold text-qbNavy-600 uppercase tracking-wider mb-1">Withdrawals / Pension Payments ($)</label>
+                                <div class="relative">
+                                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 font-bold text-xs">$</span>
+                                    <input type="number" id="div296-withdrawals" value="0" min="0" step="1000" oninput="calculateDiv296()" class="w-full pl-7 pr-3 py-2 bg-white border border-gray-300 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
+                                </div>
+                            </div>
+                            <div class="flex justify-between text-gray-700"><span>Concessional contributions (SG + sacrifice / deductible, from this tab):</span><span id="div296-contribs" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between text-gray-700"><span>Net contributions (after 15% contributions tax):</span><span id="div296-net-contribs" class="font-semibold">$0</span></div>
+                            <div class="flex justify-between font-bold text-qbNavy-600 pt-1 border-t border-blue-200"><span>Estimated earnings (End − Start + Withdrawals − Net Contribs):</span><span id="div296-est-earnings">$0</span></div>
+                            <p class="text-[11px] text-amber-800">Balance movement includes unrealised gains, so this will usually overstate earnings under the realised-earnings method. Use as a ceiling only.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                            <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-1.5">
+                                <h4 class="font-bold text-qbNavy-600 border-b border-gray-200 pb-1.5">Inputs Applied</h4>
+                                <div class="flex justify-between"><span>Financial year:</span><span id="div296-fy" class="font-semibold">—</span></div>
+                                <div class="flex justify-between gap-2"><span>Thresholds:</span><span id="div296-thresholds" class="font-semibold text-right">—</span></div>
+                                <div class="flex justify-between"><span>TSB used:</span><span id="div296-tsb-used" class="font-semibold">$0</span></div>
+                                <div class="flex justify-between"><span>Earnings used:</span><span id="div296-earnings-used" class="font-semibold">$0</span></div>
+                            </div>
+                            <div class="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-1.5">
+                                <h4 class="font-bold text-qbNavy-600 border-b border-gray-200 pb-1.5">Calculation</h4>
+                                <div class="flex justify-between"><span>Proportion above $3m:</span><span id="div296-prop-large" class="font-semibold">0%</span></div>
+                                <div class="flex justify-between"><span>15% × prop × earnings:</span><span id="div296-tax-large" class="font-semibold">$0</span></div>
+                                <div class="flex justify-between"><span>Proportion above $10m:</span><span id="div296-prop-vlarge" class="font-semibold">0%</span></div>
+                                <div class="flex justify-between"><span>10% × prop × earnings:</span><span id="div296-tax-vlarge" class="font-semibold">$0</span></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-gradient-to-br from-qbNavy-600 to-qbNavy-800 rounded-xl p-4 text-white flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <span class="text-xs uppercase tracking-widest text-qbTeal-400 font-bold">Estimated Division 296 Tax</span>
+                                <div id="div296-total" class="text-3xl font-extrabold">$0</div>
+                            </div>
+                            <div class="flex gap-4 text-right">
+                                <div>
+                                    <span class="text-[11px] text-blue-200 block">Div 296 rate on earnings</span>
+                                    <span id="div296-eff" class="text-lg font-black text-qbTeal-400">0%</span>
+                                </div>
+                                <div>
+                                    <span class="text-[11px] text-blue-200 block">Incl. 15% fund tax</span>
+                                    <span id="div296-combined" class="text-lg font-black text-white">—</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="div296-status" class="p-3 rounded-xl border text-xs"></div>
+                        <p class="text-[11px] text-gray-500">Simplified estimate. Ignores pension-phase and defined benefit adjustments, the fund's CGT cost-base reset election, and death during the year. Not included in take-home pay above.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>

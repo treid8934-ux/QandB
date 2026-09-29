@@ -1,0 +1,46 @@
+<div id="view-dividends" class="space-y-6">
+
+    <!-- Header Banner -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <span class="inline-block bg-qbNavy-50 text-qbNavy-600 text-xs font-semibold px-3 py-1 rounded-full border border-qbNavy-100 uppercase tracking-wider">Dividend Companion Plus · 2024, 2025 &amp; 2026 editions</span>
+            <h2 class="text-2xl md:text-3xl font-extrabold text-qbNavy-700 mt-2">Dividend Lookup</h2>
+            <p class="text-slate-500 text-sm mt-1 font-medium">Dividends and distributions for ASX shares, ETFs and trusts, grouped into income years by <strong>payment date</strong>, with capital events and ATO rulings for cost base work.</p>
+        </div>
+        <div id="dl-srcCount" class="flex flex-wrap md:flex-col gap-2 md:items-end flex-shrink-0"></div>
+    </div>
+
+    <!-- Search Card -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+        <h3 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+            <i data-lucide="search" class="w-5 h-5 text-qbTeal-500"></i> Find a Security
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="md:col-span-2">
+                <label for="dl-q" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Company or ASX Code</label>
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                    <input id="dl-q" type="search" autocomplete="off" spellcheck="false" placeholder="e.g. BHP, Wesfarmers, VAS" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 focus:outline-none p-3 pl-9 font-semibold">
+                </div>
+            </div>
+            <div>
+                <label for="dl-fy" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Financial Year (by Pay Date)</label>
+                <select id="dl-fy" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 focus:outline-none p-3 font-semibold cursor-pointer"></select>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <!-- Matches -->
+        <aside class="lg:col-span-4 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden no-print" aria-label="Matches">
+            <div class="flex justify-between items-center px-4 py-3 border-b border-gray-100 text-xs text-gray-500">
+                <span id="dl-listInfo"></span><span id="dl-listFy"></span>
+            </div>
+            <ul id="dl-results" role="listbox" aria-label="Matching securities" class="p-2 max-h-72 lg:max-h-[640px] overflow-y-auto space-y-0.5"></ul>
+        </aside>
+        <!-- Detail -->
+        <section id="dl-detail" class="lg:col-span-8 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden print-full" aria-live="polite"></section>
+    </div>
+
+    <p class="text-[11px] text-gray-500 leading-relaxed">Source: Company Reporting Service, Dividend Companion Plus 2024, 2025 and 2026 end-of-year editions. Where more than one edition lists the same payment, the newest edition's figures are used, since they replace earlier estimates. Franking credits are calculated as franked amount × CTR ÷ (1 − CTR), using the company tax rate shown in the notes (30% if none is shown). Amounts are cents per share or unit. Check anything you rely on against the registry statement.</p>
+</div>

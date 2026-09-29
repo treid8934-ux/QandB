@@ -1,0 +1,11 @@
+{
+  "name": "quin-bourke-suite-tools",
+  "private": true,
+  "description": "Builds shared/styles.css from Tailwind. Run from this folder: npm install, then npm run build:css",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.js -i styles.src.css -o ../shared/styles.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  }
+}

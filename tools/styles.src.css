@@ -1,0 +1,17 @@
+/* Source for shared/styles.css. Edit this (not styles.css) for custom CSS, then rebuild. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #1e293b; }
+input[type=range] { accent-color: #0284c7; }
+.gauge-bar-transition { transition: width 0.4s ease-in-out; }
+.chart-path { transition: d 0.5s ease-in-out; }
+
+@media print {
+    .no-print { display: none !important; }
+    .print-full { width: 100% !important; max-width: 100% !important; }
+    .print-only { display: block !important; }
+    body { background: white !important; color: black !important; }
+    .card-shadow { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+}

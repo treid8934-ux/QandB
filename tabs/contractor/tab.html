@@ -1,0 +1,193 @@
+<div id="view-contractor" class="space-y-8">
+
+    <!-- Context & ATO Guidance Banner -->
+    <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm card-shadow space-y-4">
+        <div class="flex items-start justify-between">
+            <div>
+                <h2 class="text-xl font-semibold text-slate-900">Legal Framework & Weighting Model</h2>
+                <p class="text-slate-600 text-xs mt-1">
+                    Reflects Australian Taxation Office ruling <strong>TR 2023/4</strong>, SGAA 1992 s12(3), and High Court decisions 
+                    (<em>Personnel Contracting</em> and <em>Jamsek</em>).
+                </p>
+            </div>
+            <span class="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-200">
+                Weighted Evaluation
+            </span>
+        </div>
+
+        <!-- Weight Breakdown Badges -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            <div class="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <span class="text-xs font-bold text-red-700 block uppercase">High Weight (+30 pts)</span>
+                <span class="text-xs text-red-900">Control & Right to Subcontract / Delegate</span>
+            </div>
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <span class="text-xs font-bold text-amber-700 block uppercase">Medium Weight (+20 pts)</span>
+                <span class="text-xs text-amber-900">Integration in Business & Commercial Risk</span>
+            </div>
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <span class="text-xs font-bold text-slate-700 block uppercase">Standard Weight (+10 pts)</span>
+                <span class="text-xs text-slate-800">Remuneration, Tools, Goodwill, Ongoing Work Expectation</span>
+            </div>
+        </div>
+
+        <!-- SG Act Warning -->
+        <div class="p-3 bg-blue-50 border-l-4 border-blue-500 rounded-r text-blue-900 text-xs flex items-start gap-2">
+            <i data-lucide="info" class="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5"></i>
+            <div>
+                <strong>Superannuation Guarantee Note:</strong> Under section 12(3) of the <em>Superannuation Guarantee (Administration) Act 1992 (SGAA)</em>, 
+                a contractor engaged mainly for their personal labour and skills may still be entitled to superannuation contributions 
+                <strong>even if classified as an independent contractor</strong> under common law.
+            </div>
+        </div>
+    </div>
+
+    <!-- Sticky Progress Bar -->
+    <div class="sticky top-20 z-20 bg-white/90 backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-sm no-print">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500">Progress</span>
+            <span id="progress-text" class="text-xs font-bold text-indigo-600">0 of 8 Answered (0 / 140 weighted pts)</span>
+        </div>
+        <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
+            <div id="progress-bar" class="bg-indigo-600 h-full w-0 transition-all duration-300 ease-out"></div>
+        </div>
+    </div>
+
+    <!-- Questionnaire Section -->
+    <div class="space-y-6" id="questions-container"></div>
+
+    <!-- Results Container -->
+    <div id="results-section" class="space-y-8 transition-all duration-500 opacity-50 pointer-events-none filter blur-sm">
+
+        <!-- Superannuation Guarantee Test Section (POSITIONED ABOVE FINAL RESULTS) -->
+        <div id="super-test-section" class="bg-white rounded-2xl border-2 border-indigo-200 shadow-lg p-6 sm:p-8 hidden">
+            <div class="space-y-4">
+                <div class="flex items-center gap-3 border-b border-slate-200 pb-4">
+                    <div class="p-2.5 bg-amber-500 rounded-xl text-white shadow-sm">
+                        <i data-lucide="shield-alert" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-900 text-lg">Contractor Superannuation Guarantee Test (SGAA 1992 s12(3))</h3>
+                        <p class="text-xs text-slate-500 mt-0.5">Because this engagement shows contractor characteristics, run this secondary ATO test to check if Superannuation Guarantee contributions are still mandatory.</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4 pt-2">
+                    <!-- Super Test 1 -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="max-w-xl">
+                            <span class="font-semibold text-xs text-slate-800 block">1. Main Purpose is Labour</span>
+                            <p class="text-xs text-slate-500">Is the contract mainly for their labour? (More than half of the dollar value of the contract is for their labour/skills, not materials or equipment).</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="setSuperTest('labour', true)" id="btn-super-labour-yes" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">Yes</button>
+                            <button onclick="setSuperTest('labour', false)" id="btn-super-labour-no" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">No</button>
+                        </div>
+                    </div>
+
+                    <!-- Super Test 2 -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="max-w-xl">
+                            <span class="font-semibold text-xs text-slate-800 block">2. Personal Labour and Skills</span>
+                            <p class="text-xs text-slate-500">Paid for time/effort, not a specific result: They are paid an agreed rate for hours worked or items produced, rather than a single lump sum to achieve a one-off final project outcome.</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="setSuperTest('personal', true)" id="btn-super-personal-yes" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">Yes</button>
+                            <button onclick="setSuperTest('personal', false)" id="btn-super-personal-no" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">No</button>
+                        </div>
+                    </div>
+
+                    <!-- Super Test 3 -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div class="max-w-xl">
+                            <span class="font-semibold text-xs text-slate-800 block">3. Performance (No Delegation)</span>
+                            <p class="text-xs text-slate-500">Must the worker perform the work personally? (The work cannot be delegated or subcontracted to someone else under the contract terms).</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="setSuperTest('delegate', true)" id="btn-super-delegate-yes" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">Yes</button>
+                            <button onclick="setSuperTest('delegate', false)" id="btn-super-delegate-no" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 hover:bg-slate-100 transition-colors">No</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Super Outcome Box -->
+                <div id="super-outcome-box" class="p-4 rounded-xl border hidden text-xs leading-relaxed"></div>
+            </div>
+        </div>
+
+        <!-- Final Classification Analysis Section -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 sm:p-8">
+            <div class="border-b border-slate-200 pb-6 mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <span class="text-xs font-bold uppercase tracking-widest text-indigo-600">Weighted Result Analysis</span>
+                    <h2 class="text-2xl font-bold text-slate-900" id="result-title">Incomplete Questionnaire</h2>
+                    <p class="text-slate-500 text-sm mt-1" id="result-subtitle">Complete all questions above to calculate classification indicator.</p>
+                </div>
+                <div class="flex items-center gap-2 no-print">
+                    <button onclick="copySummary()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition-colors flex items-center gap-2">
+                        <i data-lucide="copy" class="w-4 h-4"></i> Copy Report
+                    </button>
+                    <button onclick="window.print()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors flex items-center gap-2 shadow-sm">
+                        <i data-lucide="printer" class="w-4 h-4"></i> Print Assessment
+                    </button>
+                </div>
+            </div>
+
+            <!-- Score breakdown grid -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <!-- Status Badge Card -->
+                <div id="status-card" class="p-5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                    <div>
+                        <span class="text-xs text-slate-500 font-medium uppercase">Primary Classification</span>
+                        <div id="classification-badge" class="mt-2 text-lg font-bold text-slate-700">Awaiting Input...</div>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-4" id="classification-desc">
+                        Complete all 8 criteria to calculate weighted legal score.
+                    </p>
+                </div>
+
+                <!-- Score Tally -->
+                <div class="p-5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-medium uppercase">Weighted Score Tally (Max 140)</span>
+                    <div class="mt-2 flex items-baseline gap-4">
+                        <div>
+                            <span class="text-2xl font-bold text-indigo-600" id="emp-score">0</span>
+                            <span class="text-xs text-slate-500 block">Employee Points</span>
+                        </div>
+                        <span class="text-slate-300 text-xl font-light">/</span>
+                        <div>
+                            <span class="text-2xl font-bold text-emerald-600" id="con-score">0</span>
+                            <span class="text-xs text-slate-500 block">Contractor Points</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden mt-4 flex">
+                        <div id="emp-bar" class="bg-indigo-600 h-full transition-all duration-300" style="width: 50%;"></div>
+                        <div id="con-bar" class="bg-emerald-500 h-full transition-all duration-300" style="width: 50%;"></div>
+                    </div>
+                </div>
+
+                <!-- Confidence level -->
+                <div class="p-5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col justify-between">
+                    <span class="text-xs text-slate-500 font-medium uppercase">Indicator Strength</span>
+                    <div class="mt-2">
+                        <div id="confidence-text" class="text-2xl font-bold text-slate-800">--</div>
+                        <span class="text-xs text-slate-500">Based on weighted legal emphasis</span>
+                    </div>
+                    <div id="confidence-badge" class="mt-4 inline-block px-2 py-1 text-xs font-semibold rounded bg-slate-200 text-slate-700 w-max">
+                        Neutral
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization Chart -->
+            <div class="mt-8 border-t border-slate-100 pt-6">
+                <h3 class="text-sm font-semibold text-slate-700 uppercase tracking-wider mb-4">Weighted Trait Breakdown</h3>
+                <div class="h-64 w-full">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</div>
