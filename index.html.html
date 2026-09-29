@@ -82,7 +82,7 @@
                         <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight flex items-center gap-2">
                             Quin & Bourke Advisory Suite
                         </h1>
-                        <p class="text-xs text-blue-200">Official ATO Tax, Superannuation, Home Loan, Employment & Dividend Tools</p>
+                        <p class="text-xs text-blue-200">Official ATO Tax, SAPTO, Superannuation, Home Loan, Employment & Dividend Tools</p>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -198,8 +198,20 @@
                             <i data-lucide="users" class="w-5 h-5 text-qbTeal-500"></i> Spouse, Fringe Benefits, MLS & HECS
                         </h2>
 
-                        <!-- Spouse Income & Dependent Children Inputs -->
-                        <div class="p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
+                        <!-- Has Spouse Toggle -->
+                        <div class="flex items-center justify-between p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100">
+                            <div>
+                                <span class="block text-sm font-bold text-indigo-950">Has Spouse</span>
+                                <span class="text-xs text-indigo-800">Applies family thresholds for Medicare Levy, MLS & SAPTO</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="has-spouse-toggle" onchange="toggleSpouseSection(); calculateTax();" class="sr-only peer">
+                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                            </label>
+                        </div>
+
+                        <!-- Spouse Income & Dependent Children Inputs (Revealed when Has Spouse toggle is ON) -->
+                        <div id="spouse-details-container" class="hidden p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div>
                                     <label for="spouse-salary" class="block text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">Spouse Income ($)</label>
@@ -225,7 +237,7 @@
                                 <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-500 font-bold">$</span>
                                 <input type="number" id="rfba-input" value="0" step="500" min="0" oninput="calculateTax()" class="w-full pl-8 pr-4 py-2.5 bg-white border border-gray-300 rounded-xl font-bold text-gray-900 focus:ring-2 focus:ring-qbNavy-500 focus:outline-none">
                             </div>
-                            <p class="text-[11px] text-gray-600">Grossed-up RFBA from the income statement. Not taxed, but counts towards MLS, HELP repayment income and Division 293 income.</p>
+                            <p class="text-[11px] text-gray-600">Grossed-up RFBA from the income statement. Not taxed, but counts towards MLS, SAPTO, HELP repayment income and Division 293 income.</p>
                         </div>
 
                         <!-- Private Health Insurance (MLS) -->
@@ -266,6 +278,61 @@
                             <p id="contrib-help" class="text-[11px] text-gray-600">Paid from pre-tax salary by your employer. Reduces taxable income and is taxed at 15% inside super.</p>
                         </div>
 
+                    </div>
+
+                    <!-- Card 4: Age & Seniors Tax Offset (SAPTO) - Positioned below Spouse & MLS -->
+                    <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 space-y-5">
+                        <h2 class="text-lg font-bold text-qbNavy-600 flex items-center gap-2 border-b border-gray-100 pb-3">
+                            <i data-lucide="award" class="w-5 h-5 text-qbTeal-500"></i> Age & Seniors / Pensioners Offset (SAPTO)
+                        </h2>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label for="dob-input" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Date of Birth</label>
+                                <input type="date" id="dob-input" onchange="calculateTax()" class="w-full p-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm font-semibold text-gray-900 focus:ring-2 focus:ring-qbNavy-500">
+                            </div>
+                            <div class="p-2.5 bg-blue-50/50 rounded-xl border border-blue-100 flex flex-col justify-center">
+                                <span class="text-[11px] font-bold text-qbNavy-600 uppercase">Age at <span id="age-at-fy">30 June 2027</span></span>
+                                <span id="calc-age-display" class="text-xl font-extrabold text-qbNavy-600">—</span>
+                            </div>
+                        </div>
+
+                        <!-- Govt Pension Eligibility Check -->
+                        <div class="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                            <div>
+                                <span class="block text-xs font-bold text-gray-800">Govt Pension / Allowance Entitlement</span>
+                                <span class="text-[11px] text-gray-500">Age Pension, DVA, or allowance eligible</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="pension-eligible-toggle" onchange="calculateTax()" class="sr-only peer">
+                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                            </label>
+                        </div>
+
+                        <!-- SAPTO Relationship Category Dropdown -->
+                        <div>
+                            <label for="sapto-category" class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">SAPTO Relationship Status</label>
+                            <select id="sapto-category" onchange="calculateTax()" class="w-full bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-xl focus:ring-2 focus:ring-qbNavy-500 p-2.5 font-semibold cursor-pointer">
+                                <option value="single">Single</option>
+                                <option value="couple_together" selected>Couple (living together)</option>
+                                <option value="couple_illness">Couple (separated due to illness / care)</option>
+                                <option value="both_eligible">Both eligible in a couple</option>
+                            </select>
+                        </div>
+
+                        <!-- Spouse SAPTO eligibility (needed for unused offset transfer) -->
+                        <div id="spouse-sapto-wrap" class="hidden flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+                            <div>
+                                <span class="block text-xs font-bold text-gray-800">Spouse Also Eligible for SAPTO</span>
+                                <span id="spouse-sapto-help" class="text-[11px] text-gray-500">Only then can their unused offset transfer to you</span>
+                            </div>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="spouse-sapto-toggle" onchange="calculateTax()" class="sr-only peer">
+                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-qbNavy-600"></div>
+                            </label>
+                        </div>
+
+                        <div id="sapto-eligibility-status" class="p-3 rounded-xl border text-xs"></div>
                     </div>
 
                 </div>
@@ -370,6 +437,15 @@
                                 <div id="lito-row" class="flex justify-between py-1 border-b border-gray-100 text-emerald-700">
                                     <span>Low Income Tax Offset (LITO / LMITO)</span>
                                     <span id="res-lito-offset" class="font-semibold">-$0</span>
+                                </div>
+
+                                <!-- Dynamic SAPTO Row (Only displayed when applicable) -->
+                                <div id="sapto-row" class="hidden flex justify-between py-1 border-b border-gray-100 text-teal-700 font-medium">
+                                    <div>
+                                        <span class="block">Seniors & Pensioners Offset (SAPTO)</span>
+                                        <span id="sapto-sub-text" class="text-[11px] text-gray-500 block"></span>
+                                    </div>
+                                    <span id="res-sapto-offset" class="font-semibold">-$0</span>
                                 </div>
 
                                 <div id="franking-offset-row" class="flex justify-between py-1 border-b border-gray-100 text-blue-700 font-medium">
@@ -1736,15 +1812,6 @@
 
     <!-- COMBINED JAVASCRIPT LOGIC -->
     <script>
-        // Store calculated tax details for sharing with Home Loan calc
-        let calculatedTaxState = {
-            userIncome: 0,
-            spouseIncome: 0,
-            userTakeHome: 0,
-            spouseTakeHome: 0,
-            combinedTakeHome: 0
-        };
-
         // --- TAB SWITCHING LOGIC ---
         function switchTab(tab) {
             const btnTax = document.getElementById('tab-income-tax');
@@ -1810,6 +1877,7 @@
                 name: "2026 - 2027 (FY27)",
                 sgRate: 0.120,
                 concessionalCap: 32500,
+                agePensionAge: 67,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.15 },
@@ -1818,18 +1886,24 @@
                     { min: 190000, max: Infinity, rate: 0.45 }
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
-                // FY27 low-income Medicare thresholds not yet announced — FY26 figures carried forward. UPDATE WHEN PUBLISHED.
-                medicareLow: { lower: 28011, upper: 35013 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 36034, cutOut: 53874 },
+                    couple_together: { maxOffset: 1602, shadeOut: 31847, cutOut: 44663 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 34767, cutOut: 51087 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 31847, cutOut: 44663 }
+                },
+                // FY27 Medicare low-income thresholds not yet announced — FY26 figures carried forward. UPDATE WHEN PUBLISHED.
+                medicareLow: { lower: 28011, upper: 35013, saptoLower: 44268, saptoUpper: 55335, familyLower: 47238, saptoFamilyLower: 61623, perChildLower: 4338 },
                 mlsThresholds: { singleBase: 105000, singleT2: 123000, singleT3: 164000, familyBase: 210000, familyT2: 246000, familyT3: 328000 },
                 hecsThresholds: { isMarginal: true, lowerLimit: 69528, upperLimit: 129717, maxCapRate: 0.10 },
                 div293Threshold: 250000,
-                // Division 296 commences 1 July 2026 (first year FY27). Thresholds are CPI-indexed in set increments.
                 div296: { large: 3000000, veryLarge: 10000000, largeRate: 0.15, veryLargeRate: 0.10, transitionalEndOnly: true }
             },
             "2026": {
                 name: "2025 - 2026 (FY26)",
                 sgRate: 0.120,
                 concessionalCap: 30000,
+                agePensionAge: 67,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.16 },
@@ -1838,7 +1912,13 @@
                     { min: 190000, max: Infinity, rate: 0.45 }
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
-                medicareLow: { lower: 28011, upper: 35013 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 34919, cutOut: 52759 },
+                    couple_together: { maxOffset: 1602, shadeOut: 30994, cutOut: 43810 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 33732, cutOut: 50052 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 30994, cutOut: 43810 }
+                },
+                medicareLow: { lower: 28011, upper: 35013, saptoLower: 44268, saptoUpper: 55335, familyLower: 47238, saptoFamilyLower: 61623, perChildLower: 4338 },
                 mlsThresholds: { singleBase: 101000, singleT2: 118000, singleT3: 158000, familyBase: 202000, familyT2: 236000, familyT3: 316000 },
                 hecsThresholds: { isMarginal: true, lowerLimit: 67000, upperLimit: 125000, maxCapRate: 0.10 },
                 div293Threshold: 250000
@@ -1847,6 +1927,7 @@
                 name: "2024 - 2025 (FY25)",
                 sgRate: 0.115,
                 concessionalCap: 30000,
+                agePensionAge: 67,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.16 },
@@ -1855,7 +1936,13 @@
                     { min: 190000, max: Infinity, rate: 0.45 }
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
-                medicareLow: { lower: 27222, upper: 34027 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 34919, cutOut: 52759 },
+                    couple_together: { maxOffset: 1602, shadeOut: 30994, cutOut: 43810 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 33732, cutOut: 50052 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 30994, cutOut: 43810 }
+                },
+                medicareLow: { lower: 27222, upper: 34027, saptoLower: 43020, saptoUpper: 53775, familyLower: 45907, saptoFamilyLower: 59886, perChildLower: 4216 },
                 mlsThresholds: { singleBase: 97000, singleT2: 113000, singleT3: 151000, familyBase: 194000, familyT2: 226000, familyT3: 302000 },
                 hecsThresholds: [
                     { min: 54435, rate: 0.01 }, { min: 62851, rate: 0.02 }, { min: 66621, rate: 0.025 },
@@ -1871,6 +1958,7 @@
                 name: "2023 - 2024 (FY24)",
                 sgRate: 0.110,
                 concessionalCap: 27500,
+                agePensionAge: 67,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.19 },
@@ -1879,7 +1967,13 @@
                     { min: 180000, max: Infinity, rate: 0.45 }
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
-                medicareLow: { lower: 26000, upper: 32500 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 33241, cutOut: 51081 },
+                    couple_together: { maxOffset: 1602, shadeOut: 29832, cutOut: 42648 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 32332, cutOut: 48652 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 29832, cutOut: 42648 }
+                },
+                medicareLow: { lower: 26000, upper: 32500, saptoLower: 41089, saptoUpper: 51361, familyLower: 43846, saptoFamilyLower: 57198, perChildLower: 4027 },
                 mlsThresholds: { singleBase: 93000, singleT2: 108000, singleT3: 144000, familyBase: 186000, familyT2: 216000, familyT3: 288000 },
                 hecsThresholds: [
                     { min: 51550, rate: 0.01 }, { min: 59518, rate: 0.02 }, { min: 63089, rate: 0.025 },
@@ -1895,6 +1989,7 @@
                 name: "2022 - 2023 (FY23)",
                 sgRate: 0.105,
                 concessionalCap: 27500,
+                agePensionAge: 66.5,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.19 },
@@ -1903,7 +1998,13 @@
                     { min: 180000, max: Infinity, rate: 0.45 }
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
-                medicareLow: { lower: 24276, upper: 30345 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 32279, cutOut: 50119 },
+                    couple_together: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 31279, cutOut: 47599 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 }
+                },
+                medicareLow: { lower: 24276, upper: 30345, saptoLower: 38365, saptoUpper: 47956, familyLower: 40939, saptoFamilyLower: 53406, perChildLower: 3760 },
                 mlsThresholds: { singleBase: 90000, singleT2: 105000, singleT3: 140000, familyBase: 180000, familyT2: 210000, familyT3: 280000 },
                 hecsThresholds: [
                     { min: 48361, rate: 0.01 }, { min: 55837, rate: 0.02 }, { min: 59187, rate: 0.025 },
@@ -1919,6 +2020,7 @@
                 name: "2021 - 2022 (FY22)",
                 sgRate: 0.100,
                 concessionalCap: 27500,
+                agePensionAge: 66.5,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.19 },
@@ -1928,7 +2030,13 @@
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
                 lmito: { max: 1500 },
-                medicareLow: { lower: 23365, upper: 29207 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 32279, cutOut: 50119 },
+                    couple_together: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 31279, cutOut: 47599 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 }
+                },
+                medicareLow: { lower: 23365, upper: 29207, saptoLower: 36925, saptoUpper: 46156, familyLower: 39402, saptoFamilyLower: 51401, perChildLower: 3619 },
                 mlsThresholds: { singleBase: 90000, singleT2: 105000, singleT3: 140000, familyBase: 180000, familyT2: 210000, familyT3: 280000 },
                 hecsThresholds: [
                     { min: 47014, rate: 0.01 }, { min: 54283, rate: 0.02 }, { min: 57539, rate: 0.025 },
@@ -1944,6 +2052,7 @@
                 name: "2020 - 2021 (FY21)",
                 sgRate: 0.095,
                 concessionalCap: 25000,
+                agePensionAge: 66,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 45000, rate: 0.19 },
@@ -1953,7 +2062,13 @@
                 ],
                 lito: { max: 66667, fullCutoff: 37500, maxOffset: 700 },
                 lmito: { max: 1080 },
-                medicareLow: { lower: 23226, upper: 29032 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 32279, cutOut: 50119 },
+                    couple_together: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 31279, cutOut: 47599 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 }
+                },
+                medicareLow: { lower: 23226, upper: 29032, saptoLower: 36705, saptoUpper: 45881, familyLower: 39167, saptoFamilyLower: 51094, perChildLower: 3597 },
                 mlsThresholds: { singleBase: 90000, singleT2: 105000, singleT3: 140000, familyBase: 180000, familyT2: 210000, familyT3: 280000 },
                 hecsThresholds: [
                     { min: 46620, rate: 0.01 }, { min: 53827, rate: 0.02 }, { min: 57056, rate: 0.025 },
@@ -1969,6 +2084,7 @@
                 name: "2019 - 2020 (FY20)",
                 sgRate: 0.095,
                 concessionalCap: 25000,
+                agePensionAge: 66,
                 brackets: [
                     { min: 0, max: 18200, rate: 0 },
                     { min: 18200, max: 37000, rate: 0.19 },
@@ -1978,7 +2094,13 @@
                 ],
                 lito: { max: 66667, fullCutoff: 37000, maxOffset: 445 },
                 lmito: { max: 1080 },
-                medicareLow: { lower: 22801, upper: 28501 },
+                sapto: {
+                    single: { maxOffset: 2230, shadeOut: 32279, cutOut: 50119 },
+                    couple_together: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 },
+                    couple_illness: { maxOffset: 2040, shadeOut: 31279, cutOut: 47599 },
+                    both_eligible: { maxOffset: 1602, shadeOut: 28974, cutOut: 41790 }
+                },
+                medicareLow: { lower: 22801, upper: 28501, saptoLower: 36056, saptoUpper: 45070, familyLower: 38474, saptoFamilyLower: 50191, perChildLower: 3533 },
                 mlsThresholds: { singleBase: 90000, singleT2: 105000, singleT3: 140000, familyBase: 180000, familyT2: 210000, familyT3: 280000 },
                 hecsThresholds: [
                     { min: 45881, rate: 0.01 }, { min: 52974, rate: 0.02 }, { min: 56152, rate: 0.025 },
@@ -1999,6 +2121,33 @@
         function updateCompanyRateLabel() {
             const val = document.getElementById('company-tax-rate').value;
             document.getElementById('company-rate-val').textContent = parseFloat(val).toFixed(0) + '%';
+        }
+
+        // Shows the spouse SAPTO toggle when relevant; "Both eligible" implies it is on
+        function syncSpouseSaptoToggle() {
+            const hasSpouse = document.getElementById('has-spouse-toggle').checked;
+            const cat = document.getElementById('sapto-category').value;
+            const wrap = document.getElementById('spouse-sapto-wrap');
+            const toggle = document.getElementById('spouse-sapto-toggle');
+            const help = document.getElementById('spouse-sapto-help');
+            const show = hasSpouse && cat !== 'single';
+            wrap.classList.toggle('hidden', !show);
+            if (cat === 'both_eligible') toggle.checked = true;
+            toggle.disabled = cat === 'both_eligible';
+            help.textContent = cat === 'both_eligible'
+                ? 'Set by "Both eligible in a couple"'
+                : 'Only then can their unused offset transfer to you';
+            return show && toggle.checked;
+        }
+
+        function toggleSpouseSection() {
+            const hasSpouse = document.getElementById('has-spouse-toggle').checked;
+            const spouseContainer = document.getElementById('spouse-details-container');
+            if (hasSpouse) {
+                spouseContainer.classList.remove('hidden');
+            } else {
+                spouseContainer.classList.add('hidden');
+            }
         }
 
         function computeRawIncomeTax(taxableIncome, brackets) {
@@ -2045,12 +2194,30 @@
             return litoOffset + lmitoOffset;
         }
 
-        function computeMedicareLevy(taxableIncome, config) {
-            const { lower, upper } = config.medicareLow;
-            if (taxableIncome <= lower) return 0;
-            const full = taxableIncome * 0.02;
-            if (taxableIncome <= upper) return Math.min(full, (taxableIncome - lower) * 0.10);
-            return full;
+        /**
+         * Medicare levy with low-income reductions (individual and family), per-year thresholds from TAX_DATA.
+         * Shading: 10% of income over the lower threshold, capped at the full 2%. The upper threshold is
+         * where the two meet (lower x 1.25). Family reduction (ATO): levy = your share of family income
+         * x 10% x (family income - family lower threshold), if that is less than the individual result.
+         */
+        function computeMedicareLevy(taxableIncome, config, isSaptoEligible = false, hasSpouse = false, spouseIncome = 0, numChildren = 0) {
+            const m = config.medicareLow;
+            const indLower = isSaptoEligible ? m.saptoLower : m.lower;
+            const fullLevy = taxableIncome * 0.02;
+
+            if (taxableIncome <= indLower) return 0;
+            const individualLevy = Math.min(fullLevy, (taxableIncome - indLower) * 0.10);
+
+            // Family reduction needs a spouse or dependants
+            if (!(hasSpouse || numChildren > 0)) return individualLevy;
+
+            const familyIncome = taxableIncome + (hasSpouse ? spouseIncome : 0);
+            const famLower = (isSaptoEligible ? m.saptoFamilyLower : m.familyLower) + numChildren * m.perChildLower;
+            if (familyIncome <= famLower) return 0;
+
+            const share = familyIncome > 0 ? taxableIncome / familyIncome : 1;
+            const familyLevy = share * 0.10 * (familyIncome - famLower);
+            return Math.min(individualLevy, familyLevy);
         }
 
         function computeHelpRepayment(repaymentIncome, config) {
@@ -2082,6 +2249,16 @@
             return 0;
         }
 
+        // Store calculated tax details for sharing with Home Loan calc
+        let calculatedTaxState = {
+            userIncome: 0,
+            spouseIncome: 0,
+            userTakeHome: 0,
+            spouseTakeHome: 0,
+            combinedTakeHome: 0
+        };
+
+        // Simple salary-only take-home (used for the spouse figure in the Home Loan tab)
         function calculateIndividualTakeHome(salary, yearKey, config) {
             if (salary <= 0) return 0;
             const grossTax = computeRawIncomeTax(salary, config.brackets);
@@ -2096,50 +2273,122 @@
             return 0;
         }
 
-        /**
-         * Full individual tax computation. Pure function so scenarios (e.g. with / without
-         * salary sacrifice) can be compared like-for-like.
-         */
+        function calculateAgeOn30June(dobString, yearKey) {
+            if (!dobString) return null;
+            const dob = new Date(dobString);
+            if (isNaN(dob.getTime())) return null;
+            const targetDate = new Date(parseInt(yearKey), 5, 30); // June 30 of FY
+            let age = targetDate.getFullYear() - dob.getFullYear();
+            const m = targetDate.getMonth() - dob.getMonth();
+            if (m < 0 || (m === 0 && targetDate.getDate() < dob.getDate())) {
+                age--;
+            }
+            return age;
+        }
+
+        function computeSaptoOffset(rebateIncome, saptoCategory, config, hasSpouse = false, spouseRebateIncome = 0, spouseTaxableIncome = 0, yearKey = "2027", spouseEligible = false) {
+            let effectiveCategory = saptoCategory;
+            if (!hasSpouse) {
+                effectiveCategory = 'single';
+            }
+
+            const saptoData = config.sapto[effectiveCategory] || config.sapto.single;
+            const { maxOffset, shadeOut, cutOut } = saptoData;
+
+            if (rebateIncome >= cutOut) {
+                return { saptoOffset: 0, maxOffset, isEligible: true, note: 'Rebate income exceeds cut-out threshold' };
+            }
+
+            let individualOffset = maxOffset;
+            if (rebateIncome > shadeOut) {
+                individualOffset = Math.max(0, maxOffset - ((rebateIncome - shadeOut) * 0.125));
+            }
+
+            // Spouse transfer: only when the spouse is also SAPTO-eligible and can't use all of their own offset
+            let transferredSpouseOffset = 0;
+            if (hasSpouse && spouseEligible && effectiveCategory !== 'single') {
+                const spouseData = effectiveCategory === 'couple_illness'
+                    ? config.sapto.couple_illness
+                    : config.sapto.couple_together;
+
+                let spouseOwnOffset = spouseData.maxOffset;
+                if (spouseRebateIncome > spouseData.shadeOut) {
+                    spouseOwnOffset = Math.max(0, spouseData.maxOffset - ((spouseRebateIncome - spouseData.shadeOut) * 0.125));
+                }
+
+                // Estimate spouse tax payable to check unused portion
+                const spouseGrossTax = computeRawIncomeTax(spouseTaxableIncome, config.brackets);
+                const spouseLito = calculateOffsets(spouseTaxableIncome, yearKey, config);
+                const spouseTaxAfterLito = Math.max(0, spouseGrossTax - spouseLito);
+
+                const unusedSpouseOffset = Math.max(0, spouseOwnOffset - spouseTaxAfterLito);
+                transferredSpouseOffset = unusedSpouseOffset;
+            }
+
+            const totalSapto = individualOffset + transferredSpouseOffset;
+
+            return {
+                saptoOffset: totalSapto,
+                individualOffset,
+                transferredSpouseOffset,
+                maxOffset,
+                shadeOut,
+                cutOut,
+                isEligible: true
+            };
+        }
+
         function computeIndividualTax(p, yearKey, config) {
-            // 1. Dividends & franking gross-up
             const frankingCredits = p.frankedDiv > 0 ? p.frankedDiv * (p.companyTaxRate / (1 - p.companyTaxRate)) : 0;
             const totalCashDividends = p.frankedDiv + p.unfrankedDiv;
 
-            // 2. Taxable income (RFBA is NOT taxable income)
             const grossTaxableIncome = p.baseSalary + totalCashDividends + frankingCredits;
             const taxableIncome = Math.max(0, grossTaxableIncome - p.salarySacrifice);
 
-            // 3-4. Gross tax less non-refundable offsets (LITO/LMITO can't go below nil)
             const grossTax = computeRawIncomeTax(taxableIncome, config.brackets);
-            const offsetsAvailable = calculateOffsets(taxableIncome, yearKey, config);
-            const offsetsApplied = Math.min(offsetsAvailable, grossTax);
+            const litoLmitoOffset = calculateOffsets(taxableIncome, yearKey, config);
+
+            // SAPTO Calculations
+            const ageOnJune30 = calculateAgeOn30June(p.dob, yearKey);
+            const ageEligible = ageOnJune30 !== null && ageOnJune30 >= (config.agePensionAge || 67);
+            const isSaptoEligible = ageEligible || p.isPensionEligible;
+
+            const rebateIncome = taxableIncome + p.rfba + p.salarySacrifice;
+            let saptoResult = { saptoOffset: 0, isEligible: isSaptoEligible };
+
+            if (isSaptoEligible) {
+                saptoResult = computeSaptoOffset(rebateIncome, p.saptoCategory, config, p.hasSpouse, p.spouseSalary, p.spouseSalary, yearKey, p.spouseSaptoEligible);
+            }
+
+            const totalNonRefundableOffsets = litoLmitoOffset + (saptoResult.saptoOffset || 0);
+            const offsetsApplied = Math.min(totalNonRefundableOffsets, grossTax);
             const incomeTaxAfterOffsets = grossTax - offsetsApplied;
 
-            // 5. Medicare levy — on taxable income only (per-year low-income thresholds)
-            const medicareLevy = computeMedicareLevy(taxableIncome, config);
+            const medicareLevy = computeMedicareLevy(
+                taxableIncome, 
+                config, 
+                isSaptoEligible && (saptoResult.saptoOffset > 0 || p.isPensionEligible), 
+                p.hasSpouse,
+                p.spouseSalary, 
+                p.numChildren
+            );
 
-            // 6. MLS — tested on "income for MLS purposes" (taxable income + RFBA + reportable super
-            //    contributions); levied on taxable income + RFBA.
             const mlsTestIncome = taxableIncome + p.rfba + p.salarySacrifice;
-            const isFamily = (p.spouseSalary > 0) || (p.numChildren > 0);
+            const isFamily = p.hasSpouse || (p.numChildren > 0);
             let mlsRate = 0;
             if (!p.hasPHI) {
-                const incomeForTest = isFamily ? mlsTestIncome + p.spouseSalary : mlsTestIncome;
+                const incomeForTest = isFamily ? mlsTestIncome + (p.hasSpouse ? p.spouseSalary : 0) : mlsTestIncome;
                 mlsRate = computeMlsRate(incomeForTest, isFamily, p.numChildren, config);
             }
             const mlsAmount = (taxableIncome + p.rfba) * mlsRate;
 
-            // 7. HELP — repayment income = taxable income + RFBA + reportable super contributions
             const helpRepaymentIncome = taxableIncome + p.rfba + p.salarySacrifice;
             const hecsRepayment = p.hasHecs ? computeHelpRepayment(helpRepaymentIncome, config) : 0;
 
-            // 8. Franking credits are a REFUNDABLE offset — excess is refunded (net payable can go negative)
             const totalTaxAndLevies = incomeTaxAfterOffsets + medicareLevy + mlsAmount + hecsRepayment - frankingCredits;
-            // Salary sacrifice comes out of pay; personal deductible contributions are paid from savings
             const contributionFromPay = p.contribType === 'personal' ? 0 : p.salarySacrifice;
             const netTakeHome = (p.baseSalary + totalCashDividends - contributionFromPay) - totalTaxAndLevies;
 
-            // 9. Super & Division 293 (income = taxable income + RFBA + low-tax contributions)
             const employerSuper = p.baseSalary * config.sgRate;
             const concessionalCap = config.concessionalCap || 0;
             const totalConcessional = employerSuper + p.salarySacrifice;
@@ -2147,7 +2396,7 @@
             const effectiveCap = concessionalCap + cfAvailable;
             const cfUsed = Math.min(cfAvailable, Math.max(0, totalConcessional - concessionalCap));
             const excessConcessional = concessionalCap > 0 ? Math.max(0, totalConcessional - effectiveCap) : 0;
-            // Excess concessional contributions are not low-tax contributions for Div 293
+            
             const lowTaxContributions = totalConcessional - excessConcessional;
             const div293Income = taxableIncome + p.rfba + lowTaxContributions;
             const div293Threshold = config.div293Threshold || 250000;
@@ -2156,16 +2405,15 @@
 
             return {
                 frankingCredits, totalCashDividends, grossTaxableIncome, taxableIncome,
-                grossTax, offsetsApplied, incomeTaxAfterOffsets, medicareLevy,
+                grossTax, litoLmitoOffset, saptoResult, offsetsApplied, incomeTaxAfterOffsets, medicareLevy,
                 mlsTestIncome, mlsRate, mlsAmount, isFamily,
                 helpRepaymentIncome, hecsRepayment,
-                totalTaxAndLevies, netTakeHome,
+                totalTaxAndLevies, netTakeHome, ageOnJune30, isSaptoEligible, rebateIncome,
                 employerSuper, concessionalCap, cfAvailable, effectiveCap, cfUsed, totalConcessional, excessConcessional,
                 lowTaxContributions, div293Income, div293Tax
             };
         }
 
-        // Concessional contribution type: 'sacrifice' (employer, pre-tax) or 'personal' (after-tax, claimed as deduction)
         let contributionType = 'sacrifice';
 
         function setContributionType(type) {
@@ -2182,10 +2430,9 @@
             calculateTax();
         }
 
-        // --- CARRY-FORWARD CONCESSIONAL CONTRIBUTIONS ---
-        // Unused cap amounts accrue from 2018-19 (key 2019). Caps come from TAX_DATA; FY19 isn't a tax year in the tool.
+        // Carry-forward concessional logic
         const CC_CAP_EXTRA = { 2019: 25000 };
-        const cfValues = {};   // concessional contributions entered per prior year, keyed by FY end year
+        const cfValues = {};   
         let cfOpen = false;
 
         function getConcessionalCap(key) {
@@ -2207,12 +2454,11 @@
             calculateTax();
         }
 
-        // Builds the pool of unused amounts available in FY `yearKey` (oldest first)
         function computeCarryForward(yearKey) {
             const K = Number(yearKey);
             const years = [];
             for (let y = K - 5; y < K; y++) if (y >= 2019) years.push(y);
-            let pool = [];   // { year, amount }
+            let pool = [];
             const rows = [];
             years.forEach(y => {
                 pool = pool.filter(e => e.year >= y - 5);
@@ -2238,7 +2484,6 @@
         function renderCarryForward(cf, used) {
             document.getElementById('cf-tsb-label').textContent = `Total Super Balance at 30 June ${cf.K - 1}`;
             const tbody = document.getElementById('cf-rows');
-            // Remaining per year after this year's use (oldest first)
             let toUse = used;
             const remaining = {};
             cf.pool.forEach(e => { const take = Math.min(e.amount, toUse); toUse -= take; remaining[e.year] = e.amount - take; });
@@ -2277,7 +2522,7 @@
             }
         }
 
-        // --- DIVISION 293 PANEL ---
+        // Division 293
         let div293Open = false;
         function toggleDiv293() {
             div293Open = !div293Open;
@@ -2331,7 +2576,6 @@
             }
         }
 
-        // Latest income-tax result, used by the Div 296 panel (contributions + FY)
         let lastTaxResult = null;
 
         function calculateTax() {
@@ -2345,13 +2589,17 @@
                 frankedDiv: num('dividend-franked'),
                 unfrankedDiv: num('dividend-unfranked'),
                 companyTaxRate: parseFloat(document.getElementById('company-tax-rate').value) / 100,
+                hasSpouse: document.getElementById('has-spouse-toggle').checked,
                 spouseSalary: num('spouse-salary'),
                 numChildren: Math.max(0, parseInt(document.getElementById('dependent-children').value) || 0),
                 hasHecs: document.getElementById('hecs-toggle').checked,
                 hasPHI: document.getElementById('phi-toggle').checked,
-                // Salary sacrifice and personal deductible contributions produce the same annual tax result
                 salarySacrifice: num('salary-sacrifice'),
-                contribType: contributionType
+                contribType: contributionType,
+                dob: document.getElementById('dob-input').value,
+                isPensionEligible: document.getElementById('pension-eligible-toggle').checked,
+                saptoCategory: document.getElementById('sapto-category').value,
+                spouseSaptoEligible: syncSpouseSaptoToggle()
             };
 
             const cf = computeCarryForward(yearKey);
@@ -2361,20 +2609,45 @@
             lastTaxResult = { yearKey, config, p, r };
             if (cfOpen) renderCarryForward(cf, r.cfUsed);
 
-            const spouseTakeHome = calculateIndividualTakeHome(p.spouseSalary, yearKey, config);
-
+            // Share results with the Home Loan tab (spouse only counts when "Has Spouse" is on)
+            const spouseIncomeUsed = p.hasSpouse ? p.spouseSalary : 0;
+            const spouseTakeHome = calculateIndividualTakeHome(spouseIncomeUsed, yearKey, config);
             calculatedTaxState = {
                 userIncome: p.baseSalary,
-                spouseIncome: p.spouseSalary,
+                spouseIncome: spouseIncomeUsed,
                 userTakeHome: r.netTakeHome,
                 spouseTakeHome: spouseTakeHome,
                 combinedTakeHome: r.netTakeHome + spouseTakeHome
             };
 
+            // Update Age Display & SAPTO Feedback
+            document.getElementById('age-at-fy').textContent = `30 June ${yearKey}`;
+            const ageDisplay = document.getElementById('calc-age-display');
+            if (r.ageOnJune30 !== null) {
+                ageDisplay.textContent = `${r.ageOnJune30} yrs old`;
+            } else {
+                ageDisplay.textContent = '—';
+            }
+
+            const saptoStatus = document.getElementById('sapto-eligibility-status');
+            if (r.isSaptoEligible) {
+                const s = r.saptoResult;
+                if (s.saptoOffset > 0) {
+                    saptoStatus.className = 'p-3 rounded-xl border text-xs bg-emerald-50 border-emerald-200 text-emerald-900';
+                    let transMsg = s.transferredSpouseOffset > 0 ? ` (Includes ${formatCurrency(s.transferredSpouseOffset)} transferred from spouse)` : (p.hasSpouse && !p.spouseSaptoEligible && p.saptoCategory !== 'single' ? ' (No spouse transfer — spouse not SAPTO-eligible)' : '');
+                    saptoStatus.textContent = `✓ Eligible for SAPTO offset of ${formatCurrency(s.saptoOffset)}${transMsg}. Rebate income: ${formatCurrency(r.rebateIncome)}.`;
+                } else {
+                    saptoStatus.className = 'p-3 rounded-xl border text-xs bg-amber-50 border-amber-200 text-amber-900';
+                    saptoStatus.textContent = `Age/Pension eligible, but rebate income of ${formatCurrency(r.rebateIncome)} exceeds cut-out threshold (${formatCurrency(s.cutOut)}).`;
+                }
+            } else {
+                saptoStatus.className = 'p-3 rounded-xl border text-xs bg-gray-50 border-gray-200 text-gray-600';
+                saptoStatus.textContent = `Not eligible for SAPTO. Age Pension age required: ${config.agePensionAge} (or Govt Pension entitlement).`;
+            }
+
             const effectiveRate = r.taxableIncome > 0 ? ((r.totalTaxAndLevies / r.taxableIncome) * 100).toFixed(1) : '0.0';
             const marginalRate = getMarginalTaxRate(r.taxableIncome, config.brackets);
 
-            // Primary displays
             document.getElementById('res-net-annual').textContent = formatCurrency(r.netTakeHome);
             document.getElementById('res-effective-rate').textContent = effectiveRate + '%';
             document.getElementById('current-fy-badge').textContent = config.name;
@@ -2384,11 +2657,24 @@
             document.getElementById('freq-fortnightly').textContent = formatCurrency(r.netTakeHome / 26);
             document.getElementById('freq-weekly').textContent = formatCurrency(r.netTakeHome / 52);
 
-            // Breakdown ledger
             document.getElementById('res-base-salary').textContent = formatCurrency(p.baseSalary);
             document.getElementById('res-taxable-income').textContent = formatCurrency(r.taxableIncome);
             document.getElementById('res-gross-tax').textContent = formatCurrency(r.grossTax);
-            document.getElementById('res-lito-offset').textContent = '-' + formatCurrency(r.offsetsApplied);
+            document.getElementById('res-lito-offset').textContent = '-' + formatCurrency(r.litoLmitoOffset);
+
+            // Dynamic SAPTO Row Display in Tax Summary
+            const saptoRow = document.getElementById('sapto-row');
+            if (r.saptoResult && r.saptoResult.saptoOffset > 0) {
+                saptoRow.classList.remove('hidden');
+                document.getElementById('res-sapto-offset').textContent = '-' + formatCurrency(r.saptoResult.saptoOffset);
+                const transText = r.saptoResult.transferredSpouseOffset > 0 
+                    ? ` (incl. ${formatCurrency(r.saptoResult.transferredSpouseOffset)} spouse transfer)` 
+                    : '';
+                document.getElementById('sapto-sub-text').textContent = `Applied against gross tax${transText}`;
+            } else {
+                saptoRow.classList.add('hidden');
+            }
+
             document.getElementById('res-franking-offset').textContent = '-' + formatCurrency(r.frankingCredits);
             document.getElementById('res-medicare').textContent = formatCurrency(r.medicareLevy);
             document.getElementById('res-mls').textContent = formatCurrency(r.mlsAmount);
@@ -2406,7 +2692,6 @@
                 totalEl.className = 'text-red-600';
             }
 
-            // RFBA row
             const rfbaRow = document.getElementById('rfba-row');
             if (p.rfba > 0) {
                 rfbaRow.classList.remove('hidden');
@@ -2415,7 +2700,6 @@
                 rfbaRow.classList.add('hidden');
             }
 
-            // Dividend rows
             const divSummaryRow = document.getElementById('div-summary-row');
             if (r.totalCashDividends > 0 || r.frankingCredits > 0) {
                 divSummaryRow.classList.remove('hidden');
@@ -2425,10 +2709,9 @@
                 divSummaryRow.classList.add('hidden');
             }
 
-            document.getElementById('lito-row').style.display = r.offsetsApplied > 0 ? 'flex' : 'none';
+            document.getElementById('lito-row').style.display = r.litoLmitoOffset > 0 ? 'flex' : 'none';
             document.getElementById('franking-offset-row').style.display = r.frankingCredits > 0 ? 'flex' : 'none';
 
-            // MLS row — shown whenever there's no hospital cover so the test income is visible
             const mlsRow = document.getElementById('mls-row');
             if (!p.hasPHI) {
                 mlsRow.style.display = 'flex';
@@ -2436,7 +2719,7 @@
                 const tier = r.isFamily
                     ? `Family tier${p.numChildren > 1 ? ` (+$${((p.numChildren - 1) * 1500).toLocaleString()} child boost)` : ''}`
                     : 'Single tier';
-                const testIncome = r.isFamily ? r.mlsTestIncome + p.spouseSalary : r.mlsTestIncome;
+                const testIncome = r.isFamily ? r.mlsTestIncome + (p.hasSpouse ? p.spouseSalary : 0) : r.mlsTestIncome;
                 document.getElementById('mls-sub-text').textContent = `${tier} · MLS test income ${formatCurrency(testIncome)}`;
             } else {
                 mlsRow.style.display = 'none';
@@ -2446,12 +2729,10 @@
             document.getElementById('res-hecs-income').textContent = `Repayment income ${formatCurrency(r.helpRepaymentIncome)}`;
             document.getElementById('chart-legend-hecs').style.display = p.hasHecs ? 'flex' : 'none';
 
-            // Super
             document.getElementById('res-sg-rate-badge').textContent = `SG Rate: ${(config.sgRate * 100).toFixed(1)}%`;
             document.getElementById('res-employer-super').textContent = formatCurrency(r.employerSuper);
             document.getElementById('res-marginal-rate').textContent = (marginalRate * 100).toFixed(1) + '%';
 
-            // Concessional cap check
             const isPersonal = p.contribType === 'personal';
             const capPct = r.effectiveCap > 0 ? Math.min(100, (r.totalConcessional / r.effectiveCap) * 100) : 0;
             const capBar = document.getElementById('cap-bar');
@@ -2470,7 +2751,7 @@
             const excessBox = document.getElementById('cap-excess-box');
             if (r.excessConcessional > 0) {
                 excessBox.classList.remove('hidden');
-                const taxOn = ti => Math.max(0, computeRawIncomeTax(ti, config.brackets) - calculateOffsets(ti, yearKey, config)) + computeMedicareLevy(ti, config);
+                const taxOn = ti => Math.max(0, computeRawIncomeTax(ti, config.brackets) - calculateOffsets(ti, yearKey, config)) + computeMedicareLevy(ti, config, r.isSaptoEligible, p.hasSpouse, p.spouseSalary, p.numChildren);
                 const extraTax = Math.max(0, taxOn(r.taxableIncome + r.excessConcessional) - taxOn(r.taxableIncome) - 0.15 * r.excessConcessional);
                 document.getElementById('cap-excess').textContent = formatCurrency(r.excessConcessional);
                 document.getElementById('cap-excess-tax').textContent = formatCurrency(extraTax);
@@ -2478,10 +2759,8 @@
                 excessBox.classList.add('hidden');
             }
 
-            // Division 293 panel
             renderDiv293(r, p, config);
 
-            // Salary sacrifice impact — compare against a full no-sacrifice scenario
             const sacBox = document.getElementById('super-sac-detail-box');
             if (p.salarySacrifice > 0) {
                 sacBox.classList.remove('hidden');
@@ -2492,7 +2771,7 @@
                 const superFundTax = p.salarySacrifice * 0.15 + extraDiv293;
                 const netOutofPocketTaxSave = totalTaxSaved - superFundTax;
                 const netSuperAdded = p.salarySacrifice - superFundTax;
-                const netCost = p.salarySacrifice - totalTaxSaved;       // sacrifice: take-home drop; personal: cost from savings after tax saving
+                const netCost = p.salarySacrifice - totalTaxSaved;
                 const netWealthGain = netSuperAdded - netCost;
 
                 document.getElementById('sac-fund-tax-label').textContent = extraDiv293 > 0
@@ -2525,7 +2804,6 @@
                 document.getElementById('res-refund-note').classList.add('hidden');
             }
 
-            // Donut chart — franking credits reduce the tax slice first, then levies
             let frankLeft = r.frankingCredits;
             const taxSlice = Math.max(0, r.incomeTaxAfterOffsets - frankLeft);
             frankLeft = Math.max(0, frankLeft - r.incomeTaxAfterOffsets);
@@ -2538,7 +2816,7 @@
             recalculateHomeLoan();
         }
 
-        // --- DIVISION 296 (TAX ON EARNINGS FOR TSB ABOVE $3M) ---
+        // DIVISION 296
         function toggleDiv296() {
             const body = document.getElementById('div296-body');
             const chev = document.getElementById('div296-chevron');
@@ -2550,7 +2828,6 @@
 
         function getDiv296Config(yearKey) {
             const keys = Object.keys(TAX_DATA).map(Number).sort((a, b) => a - b);
-            // Use this year's thresholds, else the most recent earlier year that defines them
             for (let i = keys.length - 1; i >= 0; i--) {
                 if (keys[i] <= Number(yearKey) && TAX_DATA[String(keys[i])].div296) {
                     return { cfg: TAX_DATA[String(keys[i])].div296, fromKey: keys[i] };
@@ -2586,7 +2863,6 @@
             const withdrawals = num('div296-withdrawals');
             const mode = document.getElementById('div296-earnings-mode').value;
 
-            // Contributions linked from the Income Tax tab (SG + salary sacrifice), net of 15% contributions tax
             const contributions = r.employerSuper + p.salarySacrifice;
             const netContributions = contributions * 0.85;
             document.getElementById('div296-contribs').textContent = formatCurrency(contributions);
@@ -4245,6 +4521,7 @@
         window.onload = function() {
             lucide.createIcons();
             updateCompanyRateLabel();
+            toggleSpouseSection();
             initHomeLoanListeners();
             calculateTax();
             initContractorApp();
