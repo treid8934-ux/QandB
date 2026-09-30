@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quin & Bourke Financial Suite</title>
+
+    <!-- Vercel Web Analytics -->
+    <script defer src="https://cdn.vercel-insights.com/v1/script.js"></script>
+
+    <!-- FAVICON (Browser Tab Icon) -->
+    <link rel="icon" type="image/png" sizes="96x96" href="luca_pacioli-thumbnail.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="luca_pacioli-thumbnail.png">
+
+    <!-- Font + styles (styles.css is built from Tailwind — see tools/) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="shared/styles.css">
+
+    <!-- Chart.js, stored locally (used by the Independent Contractor tab) -->
+    <script src="shared/vendor/chart.umd.js"></script>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased">
+
+    <!-- TOP HEADER WITH NAVIGATION TABS -->
+    <header class="bg-qbNavy-600 text-white shadow-md no-print sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-0">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-qbTeal-500 text-qbNavy-800 flex items-center justify-center font-black text-xl shadow">
+                        <i data-lucide="layers" class="w-6 h-6 text-qbNavy-800"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight flex items-center gap-2">
+                            Quin & Bourke Advisory Suite
+                        </h1>
+                        <p class="text-xs text-blue-200">Official ATO Tax, SAPTO, Superannuation, Home Loan, Employment & Dividend Tools</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <!-- Shown only on tabs that register an onReset handler -->
+                    <button id="header-reset-btn" onclick="resetActiveTab()" class="hidden bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl flex items-center gap-2 transition border border-white/10">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> <span class="hidden sm:inline">Reset Form</span>
+                    </button>
+                    <button onclick="window.print()" class="bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-medium px-3.5 py-2 rounded-xl flex items-center gap-2 transition border border-white/10">
+                        <i data-lucide="printer" class="w-4 h-4"></i> <span class="hidden sm:inline">Print / Export PDF</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- TAB BUTTONS (built automatically from the TABS list below) -->
+            <nav id="tab-bar" class="flex space-x-2 border-b border-white/10 overflow-x-auto whitespace-nowrap"></nav>
+        </div>
+    </header>
+
+    <!-- Each tab's tabs/<id>/tab.html is loaded in here -->
+    <main id="tab-container" class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div id="tab-loading" class="py-24 text-center text-sm text-gray-500">Loading…</div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="bg-gray-900 text-gray-400 py-6 mt-12 no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-xs space-y-2">
+            <p>Calculations provided are general estimates for illustrative purposes only and do not constitute formal tax or financial advice.</p>
+            <p>Quin & Bourke Tax & Advisory Suite is an interactive estimation and compliance tool based on ATO brackets, SGAA 1992 s12(3), TR 2023/4 guidance, and Division 405 ITAA 1997.</p>
+            <p>© 2026 Quin & Bourke Financial Tools</p>
+        </div>
+    </footer>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-xl text-xs font-medium flex items-center gap-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50">
+        <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toast-msg">Copied to clipboard!</span>
+    </div>
+
+    <!-- ============================================================
+         TABS LIST — to add a tool:
+           1. Create a folder tabs/<id>/ containing tab.html and tab.js
+           2. Add one line below (id = folder name; icon = any name from shared/icons.js)
+         Tabs appear in this order. The first tab opens by default.
+         ============================================================ -->
+    <script>
+        const TABS = [
+            { id: 'income-tax', label: 'Income Tax Calculator',           icon: 'calculator' },
+            { id: 'home-loan',  label: 'Home Loan Calculator',            icon: 'home' },
+            { id: 'contractor', label: 'Independent Contractor Test',     icon: 'scale' },
+            { id: 'averaging',  label: 'Special Professionals Averaging', icon: 'bar-chart-3' },
+            { id: 'psi',        label: 'PSI · PSB · Part IVA',            icon: 'user-check' },
+            { id: 'dividends',  label: 'Dividend Lookup',                 icon: 'coins' },
+        ];
+    </script>
+
+    <!-- Shared code (order matters: data and helpers first, then the loader) -->
+    <script src="shared/icons.js"></script>
+    <script src="shared/helpers.js"></script>
+    <script src="shared/tax-data.js"></script>
+    <script src="shared/tax-engine.js"></script>
+    <script src="shared/app.js"></script>
+</body>
+</html>
