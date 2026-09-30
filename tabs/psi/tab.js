@@ -1,0 +1,576 @@
+// PSI · PSB · PART IVA ASSESSOR TAB (Div 84–87 ITAA 1997, Part IVA ITAA 1936, PCG 2021/4)
+// Everything is wrapped in a function so its names can't clash with other tabs.
+
+(function(){
+/* =========================================================
+   TAX RATES — taken from the suite's shared TAX_DATA (shared/tax-data.js),
+   so updating that file each year updates this tool too.
+   TAX_DATA is keyed by the year the FY ends ("2027" = 2026-27); it is converted
+   here to this tool's shape:
+   { "2026-27": { label, ind:[[threshold,rate],...], coBase, coFull, top, superTax, div293Threshold } }
+   ind brackets: rate applies to income ABOVE threshold up to the next.
+   Medicare levy and offsets excluded (matches the PCG 2021/4 method).
+========================================================= */
+const RATES = {};
+Object.keys(TAX_DATA).sort((a, b) => b - a).forEach(k => {
+  const d = TAX_DATA[k];
+  const fy = `${k - 1}-${String(k).slice(-2)}`;
+  const bands = d.brackets.filter(b => b.rate > 0);
+  const co = d.companyTax || { baseRate: 0.25, fullRate: 0.30 };
+  RATES[fy] = {
+    label: 'FY' + fy + (fy === '2020-21' ? ' (ATO worked examples)' : ''),
+    ind: bands.map(b => [b.min, b.rate]),
+    coBase: co.baseRate,
+    coFull: co.fullRate,
+    top: bands[bands.length - 1].rate,        // s99A trustee rate = top marginal rate
+    superTax: 0.15,                           // contributions tax
+    div293Threshold: d.div293Threshold
+  };
+});
+const DEFAULT_FY = RATES["2025-26"] ? "2025-26" : Object.keys(RATES)[0];
+
+const $ = s => document.querySelector('#psi-tool ' + s);
+const $$ = s => Array.from(document.querySelectorAll('#psi-tool ' + s));
+const num = v => { const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g,'')); return isFinite(n) ? n : 0; };
+const money = n => (n<0?'-':'') + '$' + Math.round(Math.abs(n)).toLocaleString('en-AU');
+const pct = n => (isFinite(n) ? n.toFixed(2) : '0.00') + '%';
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let uid = 1;
+
+/* =========================================================
+   STATE
+========================================================= */
+function blankState(){
+  return {
+    client:{name:'', ipp:'', structure:'company', fy:DEFAULT_FY},
+    answers:{psi:{}, psb:{}, iva:{}},
+    gw1:{}, gw2:{},
+    fin:{ total:0, retained:0, retainedRate:'coBase', benchmark:0,
+      ipp:{wages:0, super:0, dist:0, other:0},
+      parties:[],
+      opts:{superInF1:true, contribTax:true, div293:true, useF3:false} }
+  };
+}
+let S = blankState();
+
+/* =========================================================
+   FLOWCHARTS
+========================================================= */
+const OUTCOMES = {
+  NOT_PSI:{tone:'green', title:'Not personal services income', text:'The PSI rules (Divs 84–87) do not apply, so the PSB tests are not needed. Still consider Part IVA and PCG 2021/4 for how firm profits are allocated.'},
+  EMPLOYEE:{tone:'grey', title:'Employee income', text:'Salary or wages received as an employee are taxed to the individual directly and are outside the PSI attribution rules. PSB tests not required.'},
+  PSI:{tone:'amber', title:'Income is PSI', text:'Proceed to the PSB tests in Step 2.'},
+  PSB:{tone:'green', title:'Personal services business (self-assessed)', text:'The PSI attribution rules do not apply. Income can be retained in / distributed from the entity, subject to Part IVA (Step 3).'},
+  DETERMINATION:{tone:'amber', title:'Seek a PSB determination from the ATO', text:'The client cannot self-assess as a PSB. Apply for a PSB determination (s87-60/87-65). Until one is issued, the PSI rules apply.'},
+  PSI_APPLIES:{tone:'red', title:'PSI rules apply', text:'The PSI is attributed to the individual (s86-15). Entity deductions are limited (Div 85 / s86-60).'},
+  IVA_NOT:{tone:'green', title:'Part IVA should not apply', text:'On the structure-check flowchart, the arrangement does not present the usual Part IVA indicators for PSI.'},
+  IVA_MAY:{tone:'red', title:'Part IVA may apply', text:'Discuss with the client ways of reducing the Part IVA risk (e.g. increasing remuneration to the principal, paying out retained profits, restructuring distributions).'},
+  IVA_PSI:{tone:'green', title:'PSI rules attribute income to the individual', text:'Because the PSI rules apply, the income is attributed to the principal worker. Part IVA should not generally be needed for the PSI itself.'},
+  IVA_NA:{tone:'grey', title:'No interposed entity', text:'Income is earned directly by the individual, so the structure-check flowchart does not apply. If the individual is in a professional firm, PCG 2021/4 scoring below may still be relevant.'}
+};
+
+const FLOWS = {
+  psi:{ start:()=> 'p1', nodes:{
+    p1:{ref:'s84-5 ITAA 1997', q:"Is the income mainly (more than 50%) a reward for an individual's personal efforts or skills?",
+        hint:'It is not PSI where the income is mainly for supplying or selling goods, from granting a right to use property, or generated by income-producing assets or a business structure (e.g. a practice with substantial staff, goodwill and systems).',
+        yes:'p2', no:'@NOT_PSI'},
+    p2:{ref:'s84-5 / Div 86', q:"Is the income received by the individual as an employee (salary or wages from the payer)?",
+        hint:'Answer "No" if the individual contracts directly or through a company, trust or partnership.',
+        yes:'@EMPLOYEE', no:'@PSI'}
+  }},
+  psb:{ start:()=> 'r', nodes:{
+    r:{ref:'s87-18 Results test', q:'Is at least 75% of the PSI for the year earned under arrangements that meet all three results-test conditions?',
+       hint:'<ul><li>Paid for producing a result (not hourly/daily rates)</li><li>Required to supply the plant, equipment or tools needed to do the work</li><li>Liable for the cost of rectifying defects</li></ul>',
+       yes:'@PSB', no:'e80'},
+    e80:{ref:'s87-15 80% rule', q:'Does 80% or more of the PSI come from one client (and its associates)?',
+       hint:'If yes, the client cannot self-assess under the other three tests — a PSB determination is needed.',
+       yes:'any', no:'uc'},
+    uc:{ref:'s87-20 Unrelated clients test', q:'Is PSI received from two or more unrelated clients, as a direct result of making offers or invitations to the public?',
+       hint:'e.g. advertising, website, tendering. Clients must not be associates of each other or of the worker.', yes:'@PSB', no:'emp'},
+    emp:{ref:'s87-25 Employment test', q:'Does the entity engage others (who are not associates) to perform at least 20% of the principal work by market value, or have an apprentice for at least half the year?',
+       hint:'Associates can count only if the work they do is principal work of the business.', yes:'@PSB', no:'bp'},
+    bp:{ref:'s87-30 Business premises test', q:'At all times during the year, does the entity have business premises that it uses mainly for the PSI activities, with exclusive use, physically separate from private premises and from the premises of clients and their associates?',
+       hint:'All four conditions must be met for the whole period the business is conducted.', yes:'@PSB', no:'spec'},
+    any:{ref:'s87-15 / s87-65', q:'Could they otherwise pass the unrelated clients, employment or business premises test?',
+       hint:'If so, apply to the ATO for a PSB determination.', yes:'@DETERMINATION', no:'spec'},
+    spec:{ref:'s87-60 / s87-65', q:'Are there special or unusual circumstances that prevented the entity from meeting one or more of the tests?',
+       hint:'e.g. an unusual event such as illness, natural disaster, or the business being in its first year.', yes:'@DETERMINATION', no:'@PSI_APPLIES'}
+  }},
+  iva:{ start:()=>{
+      if (S.client.structure === 'sole') return '@IVA_NA';
+      const b = flowOutcome('psb');
+      if (flowOutcome('psi') === 'PSI' && b === 'PSI_APPLIES') return '@IVA_PSI';
+      return 'rel';
+    }, nodes:{
+    rel:{ref:'Part IVA ITAA 1936', q:'Is any of the income paid to a family member (other than a spouse in a genuine husband-and-wife partnership) or other related entity of the principal worker?',
+       hint:'Includes wages, super, distributions or dividends to associates, family trusts or bucket companies.', yes:'reas', no:'ent'},
+    reas:{ref:'Part IVA', q:'Is each amount reasonable remuneration for bona fide services actually performed?',
+       hint:'Compare to what an arm\'s-length person would be paid for the same work. Tip: use the related-party rows in 3c to document hours and duties.', yes:'ent', no:'@IVA_MAY'},
+    ent:{auto:true},
+    hw:{ref:'TR 94/8', q:'Is the partnership a genuine husband-and-wife partnership?',
+       hint:'Both spouses must genuinely carry on the business together, with the partnership income not being just the personal-exertion income of one spouse.', yes:'@IVA_NOT', no:'@IVA_MAY'},
+    ret:{ref:'Part IVA', q:'Are any profits retained in the company or trust at 30 June?', hint:'', yes:'be', no:'@IVA_NOT'},
+    be:{ref:'Part IVA', q:'Are BOTH of these met: (1) a legitimate attempt was made to break even by 30 June, and (2) any profits at 30 June are paid to the principal worker in the following year?',
+       hint:'', yes:'@IVA_NOT', no:'@IVA_MAY'}
+  }}
+};
+
+function resolveAuto(flow, id){
+  if (flow==='iva' && id==='ent') return S.client.structure==='partnership' ? 'hw' : 'ret';
+  return id;
+}
+
+function walk(flow){
+  const F = FLOWS[flow]; const path = [];
+  let id = F.start(); let guard=0;
+  while (guard++ < 30){
+    if (id.startsWith('@')) return {path, outcome:id.slice(1)};
+    id = resolveAuto(flow, id);
+    const n = F.nodes[id]; path.push(id);
+    const a = S.answers[flow][id];
+    if (a === undefined) return {path, outcome:null};
+    id = a ? n.yes : n.no;
+  }
+  return {path, outcome:null};
+}
+function flowOutcome(flow){
+  if (flow==='psb'){
+    const p = walk('psi').outcome;
+    if (p !== 'PSI') return p ? 'SKIP' : null;
+  }
+  return walk(flow).outcome;
+}
+
+function renderFlow(flow){
+  const el = $('#flow-' + flow);
+  if (flow==='psb'){
+    const p = walk('psi').outcome;
+    if (!p){ el.innerHTML = '<div class="info">Complete Step 1 first.</div>'; return; }
+    if (p !== 'PSI'){ el.innerHTML = outcomeHTML({tone:'grey', title:'PSB tests not required', text:'Step 1 found the income is not PSI subject to the attribution rules.'}); return; }
+  }
+  const {path, outcome} = walk(flow);
+  let h = '';
+  path.forEach(id => {
+    const n = FLOWS[flow].nodes[id]; const a = S.answers[flow][id];
+    h += `<div class="node ${a!==undefined?'answered':''}">
+      <div class="ref">${esc(n.ref)}</div><div class="q">${n.q}</div>
+      ${n.hint?`<div class="hint">${n.hint}</div>`:''}
+      <div class="yn">
+        <button data-flow="${flow}" data-node="${id}" data-val="1" class="${a===true?'sel-yes':''}">Yes</button>
+        <button data-flow="${flow}" data-node="${id}" data-val="0" class="${a===false?'sel-no':''}">No</button>
+      </div></div>`;
+  });
+  if (outcome) h += outcomeHTML(OUTCOMES[outcome]);
+  el.innerHTML = h;
+}
+function outcomeHTML(o){ return `<div class="outcome ${o.tone}"><b>${esc(o.title)}</b>${esc(o.text)}</div>`; }
+
+/* =========================================================
+   GATEWAYS
+========================================================= */
+const GW1 = [
+  'More complex than necessary to achieve the commercial objective',
+  'Appears to serve no real purpose other than gaining a tax advantage',
+  'Tax result is at odds with the commercial or economic result',
+  'Little or no risk where significant risk would normally be expected',
+  "Operates on non-commercial terms or in a non-arm's-length manner",
+  'Gap between the substance of what is achieved and its legal form'
+];
+const GW2 = [
+  "Financing arrangements relating to non-arm's-length transactions",
+  'Exploits differences between accounting standards and tax law',
+  'Materially different in principle from Everett / Galland assignments',
+  'Multiple classes of shares or units (e.g. dividend access shares)',
+  'Multiple assignments or disposals of an equity interest',
+  'Misuses the super system (e.g. assignment of an interest to an associated SMSF)',
+  'Distributes income to entities (other than the IPP) that have losses'
+];
+function renderGateways(){
+  const mk = (list, key) => list.map((t,i)=>`<label class="check"><input type="checkbox" data-gw="${key}" data-i="${i}" ${S[key][i]?'checked':''}> <span>${esc(t)}</span></label>`).join('');
+  $('#gw1').innerHTML = mk(GW1,'gw1'); $('#gw2').innerHTML = mk(GW2,'gw2');
+  renderGwResult();
+}
+function gatewayStatus(){
+  const f1 = GW1.filter((_,i)=>S.gw1[i]); const f2 = GW2.filter((_,i)=>S.gw2[i]);
+  return {pass: !f1.length && !f2.length, f1, f2};
+}
+function renderGwResult(){
+  const g = gatewayStatus();
+  $('#gwResult').innerHTML = g.pass
+    ? outcomeHTML({tone:'green', title:'Both gateways passed', text:'The PCG 2021/4 risk scoring below can be relied on.'})
+    : outcomeHTML({tone:'red', title:'Gateway failed', text:`${g.f1.length+g.f2.length} indicator(s) ticked. The risk-scoring framework is not available; the ATO may apply Part IVA or other integrity rules regardless of the score below.`});
+}
+
+/* =========================================================
+   TAX + PCG 2021/4 SCORING
+========================================================= */
+function indTax(x, R){
+  let t = 0; const b = R.ind;
+  for (let i=0;i<b.length;i++){
+    const lo=b[i][0], hi = i+1<b.length ? b[i+1][0] : Infinity;
+    if (x > lo) t += (Math.min(x,hi)-lo)*b[i][1];
+  }
+  return t;
+}
+const TYPES = {
+  ind:{label:'Individual (e.g. spouse, adult child)', individual:true},
+  coBase:{label:'Company – base rate entity'},
+  coFull:{label:'Company – full rate'},
+  top:{label:'Trustee assessed (s99A / top rate)'},
+  smsf:{label:'Super fund / SMSF (15%)'},
+  custom:{label:'Other – custom rate'}
+};
+function rateFor(type, R, custom){
+  if (type==='coBase') return R.coBase; if (type==='coFull') return R.coFull;
+  if (type==='top') return R.top; if (type==='smsf') return .15;
+  if (type==='custom') return num(custom)/100; return 0;
+}
+function individualTax(p, R, opts){
+  const firm = num(p.wages)+num(p.dist), other = num(p.other), sup = num(p.super);
+  const income = indTax(other+firm, R) - indTax(other, R);
+  const contrib = opts.contribTax ? sup*R.superTax : 0;
+  let d293 = 0;
+  if (opts.div293 && sup>0){
+    const excess = Math.max(0, other+firm+sup - R.div293Threshold);
+    d293 = .15*Math.min(sup, excess);
+  }
+  return {firm, sup, income, contrib, d293, total:income+contrib+d293, received:firm+sup};
+}
+function f1Score(p){ if(p>90)return 1; if(p>75)return 2; if(p>60)return 3; if(p>=50)return 4; if(p>25)return 5; return 6; }
+function f2Score(p){ if(p>40)return 1; if(p>35)return 2; if(p>=30)return 3; if(p>25)return 4; if(p>20)return 5; return 6; }
+function f3Score(p){ if(p>200)return 1; if(p>150)return 2; if(p>100)return 3; if(p>90)return 4; if(p>70)return 5; return 6; }
+function zoneFor(total, n){
+  if (n===2) return total<=7?'green':total===8?'amber':'red';
+  return total<=10?'green':total<=12?'amber':'red';
+}
+const r4 = x => Math.round(x*10000)/10000;
+
+function compute(fin, fy){
+  const R = RATES[fy] || RATES[DEFAULT_FY]; const o = fin.opts;
+  const rows = [];
+  const ipp = individualTax(fin.ipp, R, o);
+  rows.push({name:(S.client.ipp||'Principal (IPP)'), kind:'IPP', received:ipp.received, tax:ipp.total, detail:ipp});
+  fin.parties.forEach(p=>{
+    if (TYPES[p.type]?.individual){
+      const t = individualTax(p, R, o);
+      rows.push({name:p.name||'Related individual', kind:TYPES[p.type].label, received:t.received, tax:t.total, detail:t, id:p.id});
+    } else {
+      const amt = num(p.dist), rate = rateFor(p.type, R, p.rate);
+      rows.push({name:p.name||'Related entity', kind:TYPES[p.type].label, received:amt, tax:amt*rate, detail:{rate}, id:p.id});
+    }
+  });
+  const ret = num(fin.retained);
+  if (ret>0){ const rr = R[fin.retainedRate]; rows.push({name:'Profits retained in firm (IPP share)', kind:'Retained', received:ret, tax:ret*rr, detail:{rate:rr}}); }
+
+  const allocated = rows.reduce((a,r)=>a+r.received,0);
+  const totalTax = rows.reduce((a,r)=>a+r.tax,0);
+  const denom = num(fin.total) > 0 ? num(fin.total) : allocated;
+  const ippReturned = num(fin.ipp.wages)+num(fin.ipp.dist)+(o.superInF1?num(fin.ipp.super):0);
+  const f1 = denom ? r4(ippReturned/denom*100) : 0;
+  const f2 = denom ? r4(totalTax/denom*100) : 0;
+  const bench = num(fin.benchmark);
+  const useF3 = o.useF3 && bench>0;
+  const f3 = useF3 ? r4(ippReturned/bench*100) : null;
+  const s1 = f1Score(f1), s2 = f2Score(f2), s3 = useF3 ? f3Score(f3) : null;
+  const n = useF3 ? 3 : 2; const total = s1+s2+(s3||0);
+  const auto = f1 >= 100;
+  const zone = denom<=0 ? null : (auto ? 'green' : zoneFor(total, n));
+  return {R, rows, allocated, totalTax, denom, ippReturned, f1, f2, f3, s1, s2, s3, n, total, auto, zone, diff: num(fin.total)>0 ? num(fin.total)-allocated : 0};
+}
+
+/* Path to green: move non-IPP distributions + retained profits to the IPP until green */
+function pathToGreen(){
+  const base = compute(S.fin, S.client.fy);
+  if (!base.zone || base.zone==='green') return null;
+  const movable = S.fin.parties.reduce((a,p)=>a+num(p.dist),0) + num(S.fin.retained);
+  if (movable<=0) return {none:true};
+  const step = Math.max(100, base.denom/400);
+  for (let shift=step; shift<=movable+0.01; shift+=step){
+    const s = Math.min(shift, movable);
+    const f = JSON.parse(JSON.stringify(S.fin));
+    const k = 1 - s/movable;
+    f.parties.forEach(p=>{ p.dist = num(p.dist)*k; });
+    f.retained = num(f.retained)*k;
+    f.ipp.dist = num(f.ipp.dist) + s;
+    const r = compute(f, S.client.fy);
+    if (r.zone==='green') return {shift:s, res:r, extraTax:r.totalTax-base.totalTax};
+    if (s>=movable) break;
+  }
+  return {notReachable:true};
+}
+
+/* =========================================================
+   RENDER: parties, IPP tax, results
+========================================================= */
+function partyHTML(p){
+  const ind = TYPES[p.type]?.individual;
+  const opts = Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${p.type===k?'selected':''}>${v.label}</option>`).join('');
+  const v = k => p[k] ? Number(num(p[k])).toLocaleString('en-AU') : '';
+  return `<div class="party" data-pid="${p.id}">
+    <div class="ph"><b>${esc(p.name||'Related party')}</b><button class="btn small danger" data-del="${p.id}">Remove</button></div>
+    <div class="grid">
+      <label class="f">Name<input type="text" data-p="name" value="${esc(p.name)}" placeholder="e.g. Spouse / Family Trust / Bucket Co"></label>
+      <label class="f">Relationship<input type="text" data-p="rel" value="${esc(p.rel)}" placeholder="e.g. spouse, adult child"></label>
+      <label class="f">Type<select data-p="type">${opts}</select></label>
+      ${p.type==='custom'?`<label class="f">Tax rate (%)<input type="text" class="money" data-p="rate" value="${esc(p.rate)}" inputmode="decimal"></label>`:''}
+    </div>
+    <div class="grid" style="margin-top:8px">
+      ${ind?`<label class="f">Salary / wages ($)<input type="text" class="money" data-p="wages" value="${v('wages')}" inputmode="decimal" placeholder="0"></label>
+      <label class="f">Super contributions ($)<input type="text" class="money" data-p="super" value="${v('super')}" inputmode="decimal" placeholder="0"></label>`:''}
+      <label class="f">${ind?'Distributions / dividends ($)':'Distribution / dividend received (grossed-up) ($)'}<input type="text" class="money" data-p="dist" value="${v('dist')}" inputmode="decimal" placeholder="0"></label>
+      ${ind?`<label class="f">Other taxable income, not from firm ($)<input type="text" class="money" data-p="other" value="${v('other')}" inputmode="decimal" placeholder="0"></label>`:''}
+    </div>
+    ${ind?`<label class="f" style="margin-top:8px">Services performed / hours (for reasonableness)<input type="text" data-p="duties" value="${esc(p.duties||'')}" placeholder="e.g. bookkeeping 6 hrs/week, admin"></label>`:''}
+    <div class="taxline" data-taxline="${p.id}"></div>
+  </div>`;
+}
+function renderParties(){
+  $('#parties').innerHTML = S.fin.parties.length ? S.fin.parties.map(partyHTML).join('') : '<p class="muted" style="font-size:13px">No related parties added. Add a spouse, family trust beneficiary, bucket company, etc.</p>';
+}
+function taxBreak(d){
+  if (d.income===undefined) return `Tax: <strong>${money(d.total ?? 0)}</strong>`;
+  let s = `Firm income ${money(d.firm)} → income tax <strong>${money(d.income)}</strong>`;
+  if (d.sup) s += ` · super ${money(d.sup)} → contributions tax <strong>${money(d.contrib)}</strong>`;
+  if (d.d293) s += ` · Div 293 <strong>${money(d.d293)}</strong>`;
+  s += ` · <b>Total ${money(d.total)}</b>`;
+  if (d.firm+d.sup>0) s += ` · effective ${pct(d.total/(d.firm+d.sup)*100)}`;
+  return s;
+}
+function renderResults(){
+  const c = compute(S.fin, S.client.fy);
+  $('#ippTax').innerHTML = taxBreak(c.rows[0].detail);
+  c.rows.forEach(r=>{
+    if (!r.id) return; const el = document.querySelector(`#psi-tool [data-taxline="${r.id}"]`);
+    if (!el) return;
+    el.innerHTML = r.detail.income!==undefined ? taxBreak(r.detail) : `${money(r.received)} × ${(r.detail.rate*100).toFixed(1)}% → tax <strong>${money(r.tax)}</strong>`;
+  });
+  $('#benchWrap').style.display = S.fin.opts.useF3 ? '' : 'none';
+
+  let h = `<h2>PCG 2021/4 result</h2>`;
+  if (c.denom<=0){ $('#resultsCard').innerHTML = h + '<div class="info">Enter firm income and allocations to calculate the score.</div>'; renderSidebar(); return; }
+  if (Math.abs(c.diff) > 1) h += `<div class="warn">Allocations total ${money(c.allocated)}, which is ${money(Math.abs(c.diff))} ${c.diff>0?'less':'more'} than the total profit entitlement entered (${money(num(S.fin.total))}). The entered total is used as the denominator.</div>`;
+
+  h += `<table class="t"><thead><tr><th>Recipient</th><th>Type</th><th class="n">Received</th><th class="n">Tax</th><th class="n">Rate</th></tr></thead><tbody>`;
+  c.rows.forEach(r=>{ h += `<tr><td>${esc(r.name)}</td><td class="muted">${esc(r.kind)}</td><td class="n">${money(r.received)}</td><td class="n">${money(r.tax)}</td><td class="n">${r.received?pct(r.tax/r.received*100):'–'}</td></tr>`; });
+  h += `</tbody><tfoot><tr><td colspan="2">Total</td><td class="n">${money(c.allocated)}</td><td class="n">${money(c.totalTax)}</td><td class="n">${pct(c.f2)}</td></tr></tfoot></table>`;
+
+  h += `<h3>Scoring</h3><table class="t score-row"><thead><tr><th>Factor</th><th class="n">Result</th><th class="n">Score</th></tr></thead><tbody>
+    <tr><td>1 · Profit entitlement returned by IPP<br><span class="muted" style="font-size:12px">${money(c.ippReturned)} ÷ ${money(c.denom)}</span></td><td class="n">${pct(c.f1)}</td><td class="n"><b>${c.s1}</b></td></tr>
+    <tr><td>2 · Total effective tax rate<br><span class="muted" style="font-size:12px">${money(c.totalTax)} ÷ ${money(c.denom)}</span></td><td class="n">${pct(c.f2)}</td><td class="n"><b>${c.s2}</b></td></tr>
+    <tr><td>3 · Remuneration vs commercial benchmark${c.f3!==null?`<br><span class="muted" style="font-size:12px">${money(c.ippReturned)} ÷ ${money(num(S.fin.benchmark))}</span>`:''}</td><td class="n">${c.f3!==null?pct(c.f3):'Not assessed'}</td><td class="n"><b>${c.s3??'–'}</b></td></tr>
+  </tbody><tfoot><tr><td>Aggregate (${c.n} factors · green ≤ ${c.n===2?7:10}, amber ${c.n===2?'8':'11–12'}, red ≥ ${c.n===2?9:13})</td><td></td><td class="n">${c.total}</td></tr></tfoot></table>`;
+
+  const gw = gatewayStatus();
+  const lbl = {green:'Low risk',amber:'Moderate risk',red:'High risk'}[c.zone];
+  h += `<div class="traffic" style="margin-top:14px">
+    <div class="lights"><i class="red ${c.zone==='red'?'on':''}"></i><i class="amber ${c.zone==='amber'?'on':''}"></i><i class="green ${c.zone==='green'?'on':''}"></i></div>
+    <div><div class="small">PCG 2021/4 risk zone</div><div class="big">${c.zone.toUpperCase()} · ${lbl}</div>
+    <div class="small">${c.auto?'IPP returns 100% of the profit entitlement – automatically green.':`Score ${c.total} on ${c.n} factors.`}${gw.pass?'':' ⚠ Gateway failed – score cannot be relied on.'}</div></div></div>`;
+
+  const p = pathToGreen();
+  if (p){
+    if (p.none) h += `<div class="info">No distributions or retained profits to redirect. To move toward green, consider increasing the IPP's salary or distributions.</div>`;
+    else if (p.notReachable) h += `<div class="info">Redirecting all related-party distributions and retained profits to the IPP still doesn't reach green — review related-party wages and Factor 3.</div>`;
+    else h += `<div class="info"><b>Path to green:</b> redirecting about <b>${money(p.shift)}</b> of related-party distributions / retained profits to the IPP gives Factor 1 of ${pct(p.res.f1)}, ETR of ${pct(p.res.f2)} and a score of ${p.res.total} (green). Additional tax cost ≈ <b>${money(p.extraTax)}</b>.</div>`;
+  }
+  $('#resultsCard').innerHTML = h;
+  renderSidebar();
+}
+
+/* =========================================================
+   SIDEBAR / DOTS / SUMMARY
+========================================================= */
+function toneOf(o){ return o ? (OUTCOMES[o]?.tone || 'grey') : ''; }
+function renderSidebar(){
+  const psi = flowOutcome('psi'), psb = flowOutcome('psb'), iva = walk('iva').outcome;
+  const c = compute(S.fin, S.client.fy); const gw = gatewayStatus();
+  const pill = (tone, txt) => tone ? `<span class="pill ${tone}">${esc(txt)}</span>` : '<span class="muted">Pending</span>';
+  $('#sidebar').innerHTML = `
+    <div class="stat"><span>PSI</span>${pill(toneOf(psi), psi?OUTCOMES[psi].title:'')}</div>
+    <div class="stat"><span>PSB</span>${psb==='SKIP'?pill('grey','Not required'):pill(toneOf(psb), psb?OUTCOMES[psb].title:'')}</div>
+    <div class="stat"><span>Part IVA check</span>${pill(toneOf(iva), iva?OUTCOMES[iva].title:'')}</div>
+    <div class="stat"><span>Gateways</span>${pill(gw.pass?'green':'red', gw.pass?'Passed':'Failed')}</div>
+    <div class="stat"><span>PCG 2021/4</span>${c.zone?pill(c.zone, c.zone.toUpperCase()+' · '+c.total):'<span class="muted">Pending</span>'}</div>
+    ${c.denom>0?`<div class="stat"><span>Factor 1 / ETR</span><span>${pct(c.f1)} / ${pct(c.f2)}</span></div>`:''}
+    <div class="stat"><span>Tax year</span><span>${esc(RATES[S.client.fy]?.label||S.client.fy)}</span></div>`;
+  const setDot = (i,t) => { const d=$('#dot'+i); d.className='dot '+(t||''); };
+  setDot(1, toneOf(psi)); setDot(2, psb==='SKIP'?'grey':toneOf(psb));
+  const worst = [toneOf(iva), c.zone, gw.pass?'':'red'].includes('red') ? 'red' : [toneOf(iva), c.zone].includes('amber') ? 'amber' : (iva && c.zone ? 'green' : '');
+  setDot(3, worst); setDot(4, worst);
+}
+
+function recommendations(){
+  const out = [];
+  const psi = flowOutcome('psi'), psb = flowOutcome('psb'), iva = walk('iva').outcome;
+  const c = compute(S.fin, S.client.fy); const gw = gatewayStatus(); const st = S.client.structure;
+  if (psb==='PSI_APPLIES' && st!=='sole') out.push('PSI rules apply: attribute net PSI to the principal worker (s86-15). Check entity deductions against Div 85 / s86-60, and consider paying the principal salary within 14 days of year end to reduce the attributed amount.');
+  if (psb==='PSI_APPLIES' && S.fin.parties.some(p=>TYPES[p.type]?.individual && num(p.wages)>0)) out.push('Related-party wages are only deductible to the entity if they are for principal work (s86-60). Non-principal work (e.g. admin) paid to associates is not deductible.');
+  if (psb==='PSI_APPLIES' && st==='sole') out.push('Sole trader not a PSB: deductions limited by Div 85 (e.g. no deductions for rent/mortgage interest on the home, or payments to associates for non-principal work). Report PSI in the PSI section of the return.');
+  if (psb==='DETERMINATION') out.push('Prepare a PSB determination application. Document why the tests would be met (or the special circumstances). Treat the income as PSI until the determination is issued.');
+  if (psb==='PSB') out.push('Retain evidence supporting the PSB test passed (contracts for results, advertising, contractor invoices, premises lease) and complete the PSI section of the entity return.');
+  if (iva==='IVA_MAY') out.push('Part IVA indicators present: discuss increasing remuneration to the principal, paying out retained profits in the following year, or reducing splitting to associates.');
+  if (S.fin.parties.some(p=>TYPES[p.type]?.individual && (num(p.wages)>0 || num(p.super)>0))) out.push('Document the services performed, hours and market rate for each related individual receiving wages/super to support "reasonable remuneration for bona fide services".');
+  if (!gw.pass) out.push('One or more PCG 2021/4 gateway indicators are present — the risk score cannot be relied on. Consider restructuring or a private ruling.');
+  if (S.fin.parties.some(p=>p.type==='smsf')) out.push('Income is flowing to a super fund/SMSF — this is a listed high-risk feature. Review under the non-arm\'s-length income rules as well as PCG 2021/4.');
+  if (num(S.fin.retained)>0) out.push('Profits retained in the firm: ensure the IPP\'s share is included in Factor 1/2 (done here) and record the expected future distribution.');
+  if (c.zone==='amber' || c.zone==='red'){
+    const p = pathToGreen();
+    out.push(`PCG 2021/4 rating is ${c.zone.toUpperCase()}. Expect ATO analysis of the arrangement.` + (p && p.shift ? ` Redirecting ≈ ${money(p.shift)} to the IPP would reach green at an extra tax cost of ≈ ${money(p.extraTax)}.` : ''));
+  }
+  if (S.fin.opts.useF3===false && c.denom>0) out.push('Factor 3 not assessed. Record why a commercial remuneration benchmark was impractical to determine.');
+  if (!out.length) out.push('No specific issues flagged. Keep workpapers supporting each answer.');
+  return out;
+}
+
+function renderSummary(){
+  const psi = flowOutcome('psi'), psb = flowOutcome('psb'), ivaW = walk('iva');
+  const c = compute(S.fin, S.client.fy); const gw = gatewayStatus();
+  const oBox = (label, o) => `<h3>${label}</h3>` + (o ? outcomeHTML(OUTCOMES[o]) : '<div class="info">Not yet completed.</div>');
+  let h = `<h2>Summary – ${esc(S.client.name||'Client')}${S.client.ipp?` (${esc(S.client.ipp)})`:''}</h2>
+    <p class="lead">${esc(RATES[S.client.fy]?.label||'')} · Structure: ${esc({sole:'Sole trader',company:'Company',trust:'Trust',partnership:'Partnership'}[S.client.structure])}</p>`;
+  h += oBox('1 · PSI', psi);
+  h += psb==='SKIP' ? '<h3>2 · PSB</h3>'+outcomeHTML({tone:'grey',title:'Not required',text:'Income is not PSI subject to the attribution rules.'}) : oBox('2 · PSB', psb);
+  h += oBox('3a · Part IVA structure check', ivaW.outcome);
+  h += `<h3>3b · Gateways</h3>` + (gw.pass ? outcomeHTML({tone:'green',title:'Passed',text:'No lack-of-rationale or high-risk indicators ticked.'}) : outcomeHTML({tone:'red',title:'Failed',text:[...gw.f1,...gw.f2].join('; ')}));
+  if (c.zone) h += `<h3>3c · PCG 2021/4</h3>` + outcomeHTML({tone:c.zone, title:`${c.zone.toUpperCase()} zone – score ${c.total} (${c.n} factors)`, text:`Factor 1: ${pct(c.f1)} (score ${c.s1}) · Factor 2 ETR: ${pct(c.f2)} (score ${c.s2}) · Factor 3: ${c.f3!==null?pct(c.f3)+' (score '+c.s3+')':'not assessed'}`});
+  h += `<h3>Recommendations</h3><ul class="recs">${recommendations().map(r=>`<li>${esc(r)}</li>`).join('')}</ul>`;
+  $('#summaryCard').innerHTML = h;
+}
+
+function fileNote(){
+  const psi = flowOutcome('psi'), psb = flowOutcome('psb');
+  const c = compute(S.fin, S.client.fy); const gw = gatewayStatus();
+  const L = [];
+  const trail = flow => walk(flow).path.map(id=>{ const n=FLOWS[flow].nodes[id]; const a=S.answers[flow][id]; return `  - ${n.q.replace(/<[^>]+>/g,'')} [${n.ref}] → ${a===undefined?'unanswered':a?'Yes':'No'}`; });
+  L.push('FILE NOTE – PSI / PSB / PART IVA ASSESSMENT');
+  L.push(`Client: ${S.client.name||'-'}    Principal worker (IPP): ${S.client.ipp||'-'}`);
+  L.push(`Structure: ${S.client.structure}    Income year: ${RATES[S.client.fy]?.label||S.client.fy}`);
+  L.push(`Prepared: ${new Date().toLocaleDateString('en-AU')}`);
+  L.push('');
+  L.push('1. PERSONAL SERVICES INCOME (Div 84)'); L.push(...trail('psi')); L.push(`  Conclusion: ${psi?OUTCOMES[psi].title:'Incomplete'}`); L.push('');
+  L.push('2. PERSONAL SERVICES BUSINESS (Div 87)');
+  if (psb==='SKIP') L.push('  Not required.'); else { L.push(...trail('psb')); L.push(`  Conclusion: ${psb?OUTCOMES[psb].title:'Incomplete'}`); }
+  L.push('');
+  const iv = walk('iva');
+  L.push('3a. PART IVA – STRUCTURE CHECK'); L.push(...trail('iva')); L.push(`  Conclusion: ${iv.outcome?OUTCOMES[iv.outcome].title:'Incomplete'}`); L.push('');
+  L.push('3b. PCG 2021/4 GATEWAYS'); L.push(gw.pass?'  Both gateways passed – no indicators identified.':'  FAILED – indicators: '+[...gw.f1,...gw.f2].join('; ')); L.push('');
+  L.push('3c. PCG 2021/4 RISK ASSESSMENT');
+  if (c.denom>0){
+    L.push(`  Total profit entitlement: ${money(c.denom)}`);
+    c.rows.forEach(r=>L.push(`  - ${r.name} (${r.kind}): received ${money(r.received)}, tax ${money(r.tax)}`));
+    L.push(`  Total tax on firm income (excl. levies): ${money(c.totalTax)}`);
+    L.push(`  Factor 1 – returned by IPP: ${pct(c.f1)} → score ${c.s1}`);
+    L.push(`  Factor 2 – effective tax rate: ${pct(c.f2)} → score ${c.s2}`);
+    L.push(`  Factor 3 – vs benchmark: ${c.f3!==null?pct(c.f3)+' → score '+c.s3:'not assessed'}`);
+    L.push(`  Aggregate: ${c.total} on ${c.n} factors → ${c.zone.toUpperCase()} ZONE${c.auto?' (100% returned by IPP)':''}`);
+    const rel = S.fin.parties.filter(p=>TYPES[p.type]?.individual && p.duties);
+    if (rel.length){ L.push('  Related-party services:'); rel.forEach(p=>L.push(`   - ${p.name||'Related individual'} (${p.rel||'associate'}): ${p.duties}`)); }
+  } else L.push('  Not completed.');
+  L.push('');
+  L.push('RECOMMENDATIONS'); recommendations().forEach((r,i)=>L.push(`  ${i+1}. ${r}`));
+  L.push(''); L.push('Note: tax calculated excluding Medicare levy and offsets, consistent with the PCG 2021/4 effective tax rate method.');
+  $('#fileNote').value = L.join('\n');
+}
+
+/* =========================================================
+   GLOBAL RENDER + EVENTS
+========================================================= */
+function renderAll(){
+  $('#clientName').value = S.client.name; $('#ippName').value = S.client.ipp;
+  $('#structure').value = S.client.structure; $('#fy').value = S.client.fy;
+  $$('[data-fin]').forEach(el=>{ const k=el.dataset.fin; const v=S.fin[k]; el.value = el.tagName==='SELECT' ? v : (v? Number(v).toLocaleString('en-AU'):''); });
+  $$('[data-ipp]').forEach(el=>{ const v=S.fin.ipp[el.dataset.ipp]; el.value = v? Number(v).toLocaleString('en-AU'):''; });
+  $$('[data-opt]').forEach(el=> el.checked = !!S.fin.opts[el.dataset.opt]);
+  renderFlow('psi'); renderFlow('psb'); renderFlow('iva');
+  renderGateways(); renderParties(); renderResults(); renderSummary(); fileNote();
+}
+function refreshFlows(){ renderFlow('psi'); renderFlow('psb'); renderFlow('iva'); renderSidebar(); renderSummary(); }
+
+$('#fy').innerHTML = Object.entries(RATES).map(([k,v])=>`<option value="${k}">${esc(v.label||k)}</option>`).join('');
+
+document.getElementById('psi-tool').addEventListener('click', e=>{
+  const t = e.target;
+  if (t.dataset.flow){ S.answers[t.dataset.flow][t.dataset.node] = t.dataset.val==='1'; refreshFlows(); fileNote(); return; }
+  const stepBtn = t.closest('[data-step]') || t.closest('[data-go]');
+  if (stepBtn){ goStep(stepBtn.dataset.step || stepBtn.dataset.go); return; }
+  if (t.dataset.del){ S.fin.parties = S.fin.parties.filter(p=>String(p.id)!==t.dataset.del); renderParties(); renderResults(); renderSummary(); fileNote(); return; }
+});
+function goStep(n){
+  $$('nav.steps button').forEach(b=>b.classList.toggle('active', b.dataset.step===String(n)));
+  $$('.panel').forEach(p=>p.classList.toggle('active', p.dataset.panel===String(n)));
+  if (n==='4'||n===4){ renderSummary(); fileNote(); }
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+document.getElementById('psi-tool').addEventListener('input', e=>{
+  const t = e.target;
+  if (t.id==='clientName'){ S.client.name=t.value; }
+  else if (t.id==='ippName'){ S.client.ipp=t.value; renderResults(); }
+  else if (t.dataset.fin && t.tagName!=='SELECT'){ S.fin[t.dataset.fin]=num(t.value); renderResults(); }
+  else if (t.dataset.ipp){ S.fin.ipp[t.dataset.ipp]=num(t.value); renderResults(); }
+  else if (t.dataset.p && t.tagName!=='SELECT'){
+    const pid = t.closest('.party').dataset.pid; const p = S.fin.parties.find(x=>String(x.id)===pid);
+    const k = t.dataset.p; p[k] = ['name','rel','duties'].includes(k) ? t.value : num(t.value);
+    if (k==='name') t.closest('.party').querySelector('.ph b').textContent = t.value||'Related party';
+    renderResults();
+  }
+});
+document.getElementById('psi-tool').addEventListener('change', e=>{
+  const t = e.target;
+  if (t.id==='structure'){ S.client.structure=t.value; refreshFlows(); }
+  else if (t.id==='fy'){ S.client.fy=t.value; renderResults(); }
+  else if (t.dataset.fin && t.tagName==='SELECT'){ S.fin[t.dataset.fin]=t.value; renderResults(); }
+  else if (t.dataset.opt){ S.fin.opts[t.dataset.opt]=t.checked; renderResults(); }
+  else if (t.dataset.gw){ S[t.dataset.gw][t.dataset.i]=t.checked; renderGwResult(); renderResults(); }
+  else if (t.dataset.p==='type'){ const pid=t.closest('.party').dataset.pid; S.fin.parties.find(x=>String(x.id)===pid).type=t.value; renderParties(); renderResults(); }
+  else if (t.id==='exampleSel' && t.value){ loadExample(t.value); t.value=''; }
+  else if (t.id==='fileIn' && t.files[0]){
+    const r = new FileReader(); r.onload = ()=>{ try{ S = Object.assign(blankState(), JSON.parse(r.result)); uid = Math.max(1,...S.fin.parties.map(p=>p.id+1)); renderAll(); }catch(err){ alert('Could not read that file.'); } }; r.readAsText(t.files[0]); t.value='';
+  }
+  renderSummary(); fileNote();
+});
+document.getElementById('psi-tool').addEventListener('focusout', e=>{
+  const t = e.target;
+  if (t.classList && t.classList.contains('money') && t.value){ const n=num(t.value); t.value = t.dataset.p==='rate' ? n : n.toLocaleString('en-AU'); }
+});
+$('#addParty').onclick = ()=>{ S.fin.parties.push({id:uid++, name:'', rel:'', type:'ind', wages:0, super:0, dist:0, other:0, rate:0, duties:''}); renderParties(); renderResults(); };
+$('#btnReset').onclick = ()=>{ if(confirm('Clear all inputs?')){ S = blankState(); renderAll(); goStep(1);} };
+$('#btnExport').onclick = ()=>{
+  const blob = new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `PSI-assessment-${(S.client.name||'client').replace(/[^a-z0-9]+/gi,'-')}.json`; a.click();
+};
+$('#btnImport').onclick = ()=> $('#fileIn').click();
+$('#btnCopy').onclick = ()=>{ const ta=$('#fileNote'); ta.select(); navigator.clipboard?.writeText(ta.value).catch(()=>document.execCommand('copy')); $('#btnCopy').textContent='Copied ✓'; setTimeout(()=>$('#btnCopy').textContent='Copy file note',1500); };
+$('#btnRegen').onclick = fileNote;
+
+/* =========================================================
+   ATO WORKED EXAMPLES (FY2020-21 rates) – for validating the maths
+========================================================= */
+function loadExample(k){
+  S = blankState(); S.client.fy = '2020-21';
+  S.fin.opts = {superInF1:true, contribTax:true, div293:false, useF3:false};
+  S.answers.psi = {p1:true, p2:false}; S.answers.psb = {r:false, e80:false, uc:true};
+  const P = (name, rel, type, o) => Object.assign({id:uid++, name, rel, type, wages:0, super:0, dist:0, other:0, rate:0, duties:''}, o);
+  if (k==='brooke'){
+    Object.assign(S.client,{name:'Better Business partnership', ipp:'Brooke', structure:'partnership'});
+    S.fin.total=425000; S.fin.ipp.dist=297500;
+    S.fin.parties=[P('Brody','spouse','ind',{dist:50000}), P('BB Pty Ltd','bucket company','coBase',{dist:77500})];
+  }
+  if (k==='julie'){
+    Object.assign(S.client,{name:'Legal Services Pty Ltd', ipp:'Julie', structure:'company'});
+    S.fin.total=800000; S.fin.ipp.wages=380000; S.fin.benchmark=325000; S.fin.opts.useF3=true;
+    S.fin.parties=[P('Company X Pty Ltd','corporate beneficiary','coBase',{dist:370000}), P('Kurt','spouse','ind',{dist:50000})];
+  }
+  if (k==='ashley'){
+    Object.assign(S.client,{name:'Ashley Trust (partner in accounting practice)', ipp:'Ashley', structure:'trust'});
+    S.fin.total=700000; S.fin.ipp.dist=147000; S.fin.benchmark=250000; S.fin.opts.useF3=true;
+    S.fin.parties=[P('James','spouse','ind',{dist:130000}), P('Ashley Investments Pty Ltd','bucket company','coBase',{dist:423000})];
+  }
+  renderAll(); goStep(3);
+}
+
+// Register with the suite: build the page once everything has loaded
+registerTab('psi', {
+  init(){ renderAll(); }
+});
+})();
