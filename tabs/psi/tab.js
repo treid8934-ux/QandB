@@ -18,7 +18,7 @@ Object.keys(TAX_DATA).sort((a, b) => b - a).forEach(k => {
   const bands = d.brackets.filter(b => b.rate > 0);
   const co = d.companyTax || { baseRate: 0.25, fullRate: 0.30 };
   RATES[fy] = {
-    label: 'FY' + fy + (fy === '2020-21' ? ' (ATO worked examples)' : ''),
+    label: 'FY' + fy,
     ind: bands.map(b => [b.min, b.rate]),
     coBase: co.baseRate,
     coFull: co.fullRate,
@@ -66,7 +66,7 @@ const OUTCOMES = {
   IVA_NOT:{tone:'green', title:'Part IVA should not apply', text:'On the structure-check flowchart, the arrangement does not present the usual Part IVA indicators for PSI.'},
   IVA_MAY:{tone:'red', title:'Part IVA may apply', text:'Discuss with the client ways of reducing the Part IVA risk (e.g. increasing remuneration to the principal, paying out retained profits, restructuring distributions).'},
   IVA_PSI:{tone:'green', title:'PSI rules attribute income to the individual', text:'Because the PSI rules apply, the income is attributed to the principal worker. Part IVA should not generally be needed for the PSI itself.'},
-  IVA_NA:{tone:'grey', title:'No interposed entity', text:'Income is earned directly by the individual, so the structure-check flowchart does not apply. If the individual is in a professional firm, PCG 2021/4 scoring below may still be relevant.'}
+  IVA_NA:{tone:'grey', title:'No interposed entity', text:'Income is earned directly by the individual, so there is no entity to split or retain income through. The Part IVA structure check, gateways and PCG 2021/4 scoring are not required.'}
 };
 
 const FLOWS = {
@@ -168,37 +168,53 @@ function outcomeHTML(o){ return `<div class="outcome ${o.tone}"><b>${esc(o.title
 /* =========================================================
    GATEWAYS
 ========================================================= */
+/* Each item: t = the indicator, h = what it looks like in practice */
 const GW1 = [
-  'More complex than necessary to achieve the commercial objective',
-  'Appears to serve no real purpose other than gaining a tax advantage',
-  'Tax result is at odds with the commercial or economic result',
-  'Little or no risk where significant risk would normally be expected',
-  "Operates on non-commercial terms or in a non-arm's-length manner",
-  'Gap between the substance of what is achieved and its legal form'
+  {t:'The arrangement is more complex than it needs to be to achieve its commercial purpose',
+   h:'e.g. several trusts, companies or assignments layered together where a simpler structure would produce the same business result.'},
+  {t:'The arrangement has no real purpose other than getting a tax advantage',
+   h:'Take away the tax saving and there is no business reason left for setting it up this way.'},
+  {t:'The tax result doesn\'t match the commercial or economic result',
+   h:'e.g. the IPP does the work and effectively controls the income, but most of the profit is taxed to others at lower rates.'},
+  {t:'Little or no risk is taken where significant risk would normally be expected',
+   h:'e.g. an entity receives a large profit share without contributing capital, bearing business risk or taking on liability.'},
+  {t:'It operates on non-commercial or non-arm\'s-length terms',
+   h:'e.g. related parties are paid amounts, or deal on terms, that unrelated parties wouldn\'t accept.'},
+  {t:'The legal form doesn\'t match what actually happens in substance',
+   h:'e.g. an interest is legally assigned to a spouse or trust, but the IPP still controls it and effectively receives the benefit.'}
 ];
 const GW2 = [
-  "Financing arrangements relating to non-arm's-length transactions",
-  'Exploits differences between accounting standards and tax law',
-  'Materially different in principle from Everett / Galland assignments',
-  'Multiple classes of shares or units (e.g. dividend access shares)',
-  'Multiple assignments or disposals of an equity interest',
-  'Misuses the super system (e.g. assignment of an interest to an associated SMSF)',
-  'Distributes income to entities (other than the IPP) that have losses'
+  {t:'Financing arrangements relating to non-arm\'s-length transactions',
+   h:'Borrowing or funding between the firm, the IPP and associates that is not on commercial terms (e.g. related-party loans funding distributions or a buy-in).'},
+  {t:'Exploits differences between accounting standards and tax law',
+   h:'e.g. profit is recognised differently for accounts and tax so income ends up taxed in a lower-taxed entity, later, or not at all.'},
+  {t:'Materially different from a standard Everett assignment or Galland partnership',
+   h:'Goes beyond the accepted forms of assigning part of a partnership interest to an associate, e.g. unusual conditions, rights or pricing.'},
+  {t:'Multiple classes of shares or units',
+   h:'e.g. dividend access shares or special units that let profits be streamed to chosen family members or entities.'},
+  {t:'Multiple assignments or disposals of the same equity interest',
+   h:'The interest has been assigned, sold or re-assigned several times, e.g. to reset or re-direct entitlements.'},
+  {t:'Misuse of the superannuation system',
+   h:'e.g. part of a partnership interest assigned to an associated SMSF so firm profits are taxed at 15%.'},
+  {t:'Income distributed to entities (other than the IPP) that have losses',
+   h:'Profits sent to an entity with current-year or carried-forward losses so they are sheltered from tax.'}
 ];
+
 function renderGateways(){
-  const mk = (list, key) => list.map((t,i)=>`<label class="check"><input type="checkbox" data-gw="${key}" data-i="${i}" ${S[key][i]?'checked':''}> <span>${esc(t)}</span></label>`).join('');
+  const mk = (list, key) => list.map((g,i)=>`<label class="check"><input type="checkbox" data-gw="${key}" data-i="${i}" ${S[key][i]?'checked':''}> <span>${esc(g.t)}<span class="gwhint">${esc(g.h)}</span></span></label>`).join('');
   $('#gw1').innerHTML = mk(GW1,'gw1'); $('#gw2').innerHTML = mk(GW2,'gw2');
   renderGwResult();
 }
 function gatewayStatus(){
-  const f1 = GW1.filter((_,i)=>S.gw1[i]); const f2 = GW2.filter((_,i)=>S.gw2[i]);
+  const f1 = GW1.filter((_,i)=>S.gw1[i]).map(g=>g.t); const f2 = GW2.filter((_,i)=>S.gw2[i]).map(g=>g.t);
   return {pass: !f1.length && !f2.length, f1, f2};
 }
 function renderGwResult(){
   const g = gatewayStatus();
   $('#gwResult').innerHTML = g.pass
-    ? outcomeHTML({tone:'green', title:'Both gateways passed', text:'The PCG 2021/4 risk scoring below can be relied on.'})
-    : outcomeHTML({tone:'red', title:'Gateway failed', text:`${g.f1.length+g.f2.length} indicator(s) ticked. The risk-scoring framework is not available; the ATO may apply Part IVA or other integrity rules regardless of the score below.`});
+    ? outcomeHTML({tone:'green', title:'Both gateways passed', text:'Nothing ticked, so the arrangement can be rated using the PCG 2021/4 risk scoring in 3c.'})
+    : outcomeHTML({tone:'red', title:`Failed ${[g.f1.length?'Gateway 1':'', g.f2.length?'Gateway 2':''].filter(Boolean).join(' and ')}`,
+        text:`${g.f1.length+g.f2.length} indicator(s) ticked. The arrangement can't be rated under the PCG 2021/4 risk scoring, so the score in 3c can't be relied on. The ATO may review it under Part IVA or other integrity rules regardless of the score.`});
 }
 
 /* =========================================================
@@ -383,41 +399,45 @@ function renderResults(){
 function toneOf(o){ return o ? (OUTCOMES[o]?.tone || 'grey') : ''; }
 function renderSidebar(){
   const psi = flowOutcome('psi'), psb = flowOutcome('psb'), iva = walk('iva').outcome;
-  const c = compute(S.fin, S.client.fy); const gw = gatewayStatus();
+  const c = compute(S.fin, S.client.fy); const gw = gatewayStatus(); const need = pcgNeeded();
   const pill = (tone, txt) => tone ? `<span class="pill ${tone}">${esc(txt)}</span>` : '<span class="muted">Pending</span>';
   $('#sidebar').innerHTML = `
     <div class="stat"><span>PSI</span>${pill(toneOf(psi), psi?OUTCOMES[psi].title:'')}</div>
     <div class="stat"><span>PSB</span>${psb==='SKIP'?pill('grey','Not required'):pill(toneOf(psb), psb?OUTCOMES[psb].title:'')}</div>
     <div class="stat"><span>Part IVA check</span>${pill(toneOf(iva), iva?OUTCOMES[iva].title:'')}</div>
-    <div class="stat"><span>Gateways</span>${pill(gw.pass?'green':'red', gw.pass?'Passed':'Failed')}</div>
-    <div class="stat"><span>PCG 2021/4</span>${c.zone?pill(c.zone, c.zone.toUpperCase()+' · '+c.total):'<span class="muted">Pending</span>'}</div>
-    ${c.denom>0?`<div class="stat"><span>Factor 1 / ETR</span><span>${pct(c.f1)} / ${pct(c.f2)}</span></div>`:''}
+    ${need===false ? `<div class="stat"><span>Gateways</span>${pill('grey','Not required')}</div>
+    <div class="stat"><span>PCG 2021/4</span>${pill('grey','Not required')}</div>` : need===null ? `<div class="stat"><span>Gateways</span><span class="muted">Pending</span></div>
+    <div class="stat"><span>PCG 2021/4</span><span class="muted">Pending</span></div>` : `<div class="stat"><span>Gateways</span>${pill(gw.pass?'green':'red', gw.pass?'Passed':'Failed')}</div>
+    <div class="stat"><span>PCG 2021/4</span>${c.zone?pill(c.zone, c.zone.toUpperCase()+' · '+c.total):'<span class="muted">Pending</span>'}</div>`}
+    ${need && c.denom>0?`<div class="stat"><span>Factor 1 / ETR</span><span>${pct(c.f1)} / ${pct(c.f2)}</span></div>`:''}
     <div class="stat"><span>Tax year</span><span>${esc(RATES[S.client.fy]?.label||S.client.fy)}</span></div>`;
   const setDot = (i,t) => { const d=$('#dot'+i); d.className='dot '+(t||''); };
   setDot(1, toneOf(psi)); setDot(2, psb==='SKIP'?'grey':toneOf(psb));
   const worst = [toneOf(iva), c.zone, gw.pass?'':'red'].includes('red') ? 'red' : [toneOf(iva), c.zone].includes('amber') ? 'amber' : (iva && c.zone ? 'green' : '');
-  setDot(3, worst); setDot(4, worst);
+  const step3 = need ? worst : toneOf(iva);
+  setDot(3, step3); setDot(4, step3);
 }
 
 function recommendations(){
   const out = [];
   const psi = flowOutcome('psi'), psb = flowOutcome('psb'), iva = walk('iva').outcome;
   const c = compute(S.fin, S.client.fy); const gw = gatewayStatus(); const st = S.client.structure;
+  const need = pcgNeeded() === true;   // 3b / 3c completed
   if (psb==='PSI_APPLIES' && st!=='sole') out.push('PSI rules apply: attribute net PSI to the principal worker (s86-15). Check entity deductions against Div 85 / s86-60, and consider paying the principal salary within 14 days of year end to reduce the attributed amount.');
-  if (psb==='PSI_APPLIES' && S.fin.parties.some(p=>TYPES[p.type]?.individual && num(p.wages)>0)) out.push('Related-party wages are only deductible to the entity if they are for principal work (s86-60). Non-principal work (e.g. admin) paid to associates is not deductible.');
+  if (need && psb==='PSI_APPLIES' && S.fin.parties.some(p=>TYPES[p.type]?.individual && num(p.wages)>0)) out.push('Related-party wages are only deductible to the entity if they are for principal work (s86-60). Non-principal work (e.g. admin) paid to associates is not deductible.');
   if (psb==='PSI_APPLIES' && st==='sole') out.push('Sole trader not a PSB: deductions limited by Div 85 (e.g. no deductions for rent/mortgage interest on the home, or payments to associates for non-principal work). Report PSI in the PSI section of the return.');
   if (psb==='DETERMINATION') out.push('Prepare a PSB determination application. Document why the tests would be met (or the special circumstances). Treat the income as PSI until the determination is issued.');
   if (psb==='PSB') out.push('Retain evidence supporting the PSB test passed (contracts for results, advertising, contractor invoices, premises lease) and complete the PSI section of the entity return.');
   if (iva==='IVA_MAY') out.push('Part IVA indicators present: discuss increasing remuneration to the principal, paying out retained profits in the following year, or reducing splitting to associates.');
-  if (S.fin.parties.some(p=>TYPES[p.type]?.individual && (num(p.wages)>0 || num(p.super)>0))) out.push('Document the services performed, hours and market rate for each related individual receiving wages/super to support "reasonable remuneration for bona fide services".');
-  if (!gw.pass) out.push('One or more PCG 2021/4 gateway indicators are present — the risk score cannot be relied on. Consider restructuring or a private ruling.');
-  if (S.fin.parties.some(p=>p.type==='smsf')) out.push('Income is flowing to a super fund/SMSF — this is a listed high-risk feature. Review under the non-arm\'s-length income rules as well as PCG 2021/4.');
-  if (num(S.fin.retained)>0) out.push('Profits retained in the firm: ensure the IPP\'s share is included in Factor 1/2 (done here) and record the expected future distribution.');
-  if (c.zone==='amber' || c.zone==='red'){
+  if (need && S.fin.parties.some(p=>TYPES[p.type]?.individual && (num(p.wages)>0 || num(p.super)>0))) out.push('Document the services performed, hours and market rate for each related individual receiving wages/super to support "reasonable remuneration for bona fide services".');
+  if (need && !gw.pass) out.push('One or more PCG 2021/4 gateway indicators are present — the risk score cannot be relied on. Consider restructuring or a private ruling.');
+  if (need && S.fin.parties.some(p=>p.type==='smsf')) out.push('Income is flowing to a super fund/SMSF — this is a listed high-risk feature. Review under the non-arm\'s-length income rules as well as PCG 2021/4.');
+  if (need && num(S.fin.retained)>0) out.push('Profits retained in the firm: ensure the IPP\'s share is included in Factor 1/2 (done here) and record the expected future distribution.');
+  if (need && c.zone==='amber' || c.zone==='red'){
     const p = pathToGreen();
     out.push(`PCG 2021/4 rating is ${c.zone.toUpperCase()}. Expect ATO analysis of the arrangement.` + (p && p.shift ? ` Redirecting ≈ ${money(p.shift)} to the IPP would reach green at an extra tax cost of ≈ ${money(p.extraTax)}.` : ''));
   }
-  if (S.fin.opts.useF3===false && c.denom>0) out.push('Factor 3 not assessed. Record why a commercial remuneration benchmark was impractical to determine.');
+  if (need && S.fin.opts.useF3===false && c.denom>0) out.push('Factor 3 not assessed. Record why a commercial remuneration benchmark was impractical to determine.');
   if (!out.length) out.push('No specific issues flagged. Keep workpapers supporting each answer.');
   return out;
 }
@@ -431,8 +451,11 @@ function renderSummary(){
   h += oBox('1 · PSI', psi);
   h += psb==='SKIP' ? '<h3>2 · PSB</h3>'+outcomeHTML({tone:'grey',title:'Not required',text:'Income is not PSI subject to the attribution rules.'}) : oBox('2 · PSB', psb);
   h += oBox('3a · Part IVA structure check', ivaW.outcome);
+  if (pcgNeeded() === false) h += `<h3>3b / 3c · PCG 2021/4</h3>` + outcomeHTML({tone:'grey', title:'Not required', text:'Part IVA structure check did not indicate Part IVA may apply.'});
+  else {
   h += `<h3>3b · Gateways</h3>` + (gw.pass ? outcomeHTML({tone:'green',title:'Passed',text:'No lack-of-rationale or high-risk indicators ticked.'}) : outcomeHTML({tone:'red',title:'Failed',text:[...gw.f1,...gw.f2].join('; ')}));
   if (c.zone) h += `<h3>3c · PCG 2021/4</h3>` + outcomeHTML({tone:c.zone, title:`${c.zone.toUpperCase()} zone – score ${c.total} (${c.n} factors)`, text:`Factor 1: ${pct(c.f1)} (score ${c.s1}) · Factor 2 ETR: ${pct(c.f2)} (score ${c.s2}) · Factor 3: ${c.f3!==null?pct(c.f3)+' (score '+c.s3+')':'not assessed'}`});
+  }
   h += `<h3>Recommendations</h3><ul class="recs">${recommendations().map(r=>`<li>${esc(r)}</li>`).join('')}</ul>`;
   $('#summaryCard').innerHTML = h;
 }
@@ -453,6 +476,7 @@ function fileNote(){
   L.push('');
   const iv = walk('iva');
   L.push('3a. PART IVA – STRUCTURE CHECK'); L.push(...trail('iva')); L.push(`  Conclusion: ${iv.outcome?OUTCOMES[iv.outcome].title:'Incomplete'}`); L.push('');
+  if (pcgNeeded() === false){ L.push('3b/3c. PCG 2021/4 GATEWAYS & RISK ASSESSMENT'); L.push('  Not required – the Part IVA structure check did not indicate Part IVA may apply.'); L.push(''); } else {
   L.push('3b. PCG 2021/4 GATEWAYS'); L.push(gw.pass?'  Both gateways passed – no indicators identified.':'  FAILED – indicators: '+[...gw.f1,...gw.f2].join('; ')); L.push('');
   L.push('3c. PCG 2021/4 RISK ASSESSMENT');
   if (c.denom>0){
@@ -467,6 +491,7 @@ function fileNote(){
     if (rel.length){ L.push('  Related-party services:'); rel.forEach(p=>L.push(`   - ${p.name||'Related individual'} (${p.rel||'associate'}): ${p.duties}`)); }
   } else L.push('  Not completed.');
   L.push('');
+  }
   L.push('RECOMMENDATIONS'); recommendations().forEach((r,i)=>L.push(`  ${i+1}. ${r}`));
   L.push(''); L.push('Note: tax calculated excluding Medicare levy and offsets, consistent with the PCG 2021/4 effective tax rate method.');
   $('#fileNote').value = L.join('\n');
@@ -482,9 +507,24 @@ function renderAll(){
   $$('[data-ipp]').forEach(el=>{ const v=S.fin.ipp[el.dataset.ipp]; el.value = v? Number(v).toLocaleString('en-AU'):''; });
   $$('[data-opt]').forEach(el=> el.checked = !!S.fin.opts[el.dataset.opt]);
   renderFlow('psi'); renderFlow('psb'); renderFlow('iva');
-  renderGateways(); renderParties(); renderResults(); renderSummary(); fileNote();
+  renderIvaStage(); renderGateways(); renderParties(); renderResults(); renderSummary(); fileNote();
 }
-function refreshFlows(){ renderFlow('psi'); renderFlow('psb'); renderFlow('iva'); renderSidebar(); renderSummary(); }
+function refreshFlows(){ renderFlow('psi'); renderFlow('psb'); renderFlow('iva'); renderIvaStage(); renderSidebar(); renderSummary(); }
+
+/* 3b (gateways) and 3c (risk scoring) are only needed when the 3a structure check
+   concludes Part IVA may apply. Returns true (needed), false (not needed) or null (3a unfinished). */
+function pcgNeeded(){
+  const o = walk('iva').outcome;
+  return o ? o === 'IVA_MAY' : null;
+}
+function renderIvaStage(){
+  const need = pcgNeeded(), o = walk('iva').outcome;
+  $('#ivaDeep').style.display = need ? '' : 'none';
+  $('#ivaSkip').innerHTML = need ? '' : need === null
+    ? '<div class="card"><div class="info" style="margin:0">Complete the Part IVA structure check (3a) above. The PCG 2021/4 gateways (3b) and risk scoring (3c) will appear here if Part IVA may apply.</div></div>'
+    : '<div class="card">' + outcomeHTML({tone:'grey', title:'3b and 3c not required',
+        text:`The structure check concluded: ${OUTCOMES[o].title}. The PCG 2021/4 gateways and risk scoring only need to be completed where Part IVA may apply.`}) + '</div>';
+}
 
 $('#fy').innerHTML = Object.entries(RATES).map(([k,v])=>`<option value="${k}">${esc(v.label||k)}</option>`).join('');
 
@@ -522,7 +562,6 @@ document.getElementById('psi-tool').addEventListener('change', e=>{
   else if (t.dataset.opt){ S.fin.opts[t.dataset.opt]=t.checked; renderResults(); }
   else if (t.dataset.gw){ S[t.dataset.gw][t.dataset.i]=t.checked; renderGwResult(); renderResults(); }
   else if (t.dataset.p==='type'){ const pid=t.closest('.party').dataset.pid; S.fin.parties.find(x=>String(x.id)===pid).type=t.value; renderParties(); renderResults(); }
-  else if (t.id==='exampleSel' && t.value){ loadExample(t.value); t.value=''; }
   else if (t.id==='fileIn' && t.files[0]){
     const r = new FileReader(); r.onload = ()=>{ try{ S = Object.assign(blankState(), JSON.parse(r.result)); uid = Math.max(1,...S.fin.parties.map(p=>p.id+1)); renderAll(); }catch(err){ alert('Could not read that file.'); } }; r.readAsText(t.files[0]); t.value='';
   }
@@ -542,32 +581,6 @@ $('#btnExport').onclick = ()=>{
 $('#btnImport').onclick = ()=> $('#fileIn').click();
 $('#btnCopy').onclick = ()=>{ const ta=$('#fileNote'); ta.select(); navigator.clipboard?.writeText(ta.value).catch(()=>document.execCommand('copy')); $('#btnCopy').textContent='Copied ✓'; setTimeout(()=>$('#btnCopy').textContent='Copy file note',1500); };
 $('#btnRegen').onclick = fileNote;
-
-/* =========================================================
-   ATO WORKED EXAMPLES (FY2020-21 rates) – for validating the maths
-========================================================= */
-function loadExample(k){
-  S = blankState(); S.client.fy = '2020-21';
-  S.fin.opts = {superInF1:true, contribTax:true, div293:false, useF3:false};
-  S.answers.psi = {p1:true, p2:false}; S.answers.psb = {r:false, e80:false, uc:true};
-  const P = (name, rel, type, o) => Object.assign({id:uid++, name, rel, type, wages:0, super:0, dist:0, other:0, rate:0, duties:''}, o);
-  if (k==='brooke'){
-    Object.assign(S.client,{name:'Better Business partnership', ipp:'Brooke', structure:'partnership'});
-    S.fin.total=425000; S.fin.ipp.dist=297500;
-    S.fin.parties=[P('Brody','spouse','ind',{dist:50000}), P('BB Pty Ltd','bucket company','coBase',{dist:77500})];
-  }
-  if (k==='julie'){
-    Object.assign(S.client,{name:'Legal Services Pty Ltd', ipp:'Julie', structure:'company'});
-    S.fin.total=800000; S.fin.ipp.wages=380000; S.fin.benchmark=325000; S.fin.opts.useF3=true;
-    S.fin.parties=[P('Company X Pty Ltd','corporate beneficiary','coBase',{dist:370000}), P('Kurt','spouse','ind',{dist:50000})];
-  }
-  if (k==='ashley'){
-    Object.assign(S.client,{name:'Ashley Trust (partner in accounting practice)', ipp:'Ashley', structure:'trust'});
-    S.fin.total=700000; S.fin.ipp.dist=147000; S.fin.benchmark=250000; S.fin.opts.useF3=true;
-    S.fin.parties=[P('James','spouse','ind',{dist:130000}), P('Ashley Investments Pty Ltd','bucket company','coBase',{dist:423000})];
-  }
-  renderAll(); goStep(3);
-}
 
 // Register with the suite: build the page once everything has loaded
 registerTab('psi', {

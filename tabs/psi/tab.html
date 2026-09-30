@@ -98,6 +98,10 @@
   #psi-tool .layout{grid-template-columns:1fr}
   #psi-tool .card{break-inside:avoid}
 }
+#psi-tool .gw{border:1px solid var(--line);border-radius:10px;padding:4px 14px 8px;margin-bottom:12px;background:#fcfcfd}
+#psi-tool .gw h3{margin:12px 0 4px}
+#psi-tool .gwlead{font-size:12.5px;color:var(--muted);margin:0 0 6px}
+#psi-tool .gwhint{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 /* Put back browser defaults that the suite's base styles (Tailwind) reset */
 #psi-tool h1,#psi-tool h2,#psi-tool h3{font-weight:700}
 #psi-tool h1{font-weight:600}
@@ -113,12 +117,6 @@
         <div class="sub">Div 84–87 ITAA 1997 · Part IVA ITAA 1936 · PCG 2021/4 risk framework</div>
       </div>
       <div class="hdr-actions">
-        <select id="exampleSel" class="btn ghost" style="color:#fff;background:transparent">
-          <option value="" style="color:#000">Load ATO example…</option>
-          <option value="brooke" style="color:#000">Brooke – low risk (2 factors)</option>
-          <option value="julie" style="color:#000">Julie – moderate risk</option>
-          <option value="ashley" style="color:#000">Ashley – high risk</option>
-        </select>
         <button class="btn ghost" id="btnExport">Save case</button>
         <button class="btn ghost" id="btnImport">Open case</button>
         <button class="btn ghost" id="btnReset">Reset</button>
@@ -184,13 +182,24 @@
             <div id="flow-iva"></div>
           </div>
 
+          <div id="ivaSkip"></div>
+          <div id="ivaDeep">
           <div class="card">
             <h2>3b · PCG 2021/4 gateways</h2>
-            <p class="lead">Both gateways must be passed before the risk scoring can be relied on. Tick anything that applies.</p>
-            <h3>Gateway 1 – Commercial rationale (indicators of a <u>lack</u> of rationale)</h3>
-            <div id="gw1"></div>
-            <h3>Gateway 2 – High-risk features</h3>
-            <div id="gw2"></div>
+            <p class="lead">Before the risk scoring in 3c can be used, the <b>arrangement</b> must pass two gateways. The arrangement is how the IPP provides services to the firm and how their share of the firm's profits is split between themselves, associates and related entities, e.g. through a family trust, bucket company, service entity or an assignment of part of a partnership interest.</p>
+            <div class="info" style="margin-bottom:14px">Tick any statement that describes the arrangement. <b>Leave everything unticked if none apply</b>; an unticked gateway is passed.</div>
+
+            <div class="gw">
+              <h3>Gateway 1 · Is there a genuine commercial reason for the arrangement?</h3>
+              <p class="gwlead">Tests whether the way the IPP's profits are structured and distributed is driven by how the business genuinely operates, rather than set up mainly to reduce tax. Each statement is a sign of a <u>lack</u> of commercial rationale.</p>
+              <div id="gw1"></div>
+            </div>
+
+            <div class="gw">
+              <h3>Gateway 2 · Does the arrangement have any high-risk features?</h3>
+              <p class="gwlead">The ATO treats these features as high risk whatever the score. If any are present, the arrangement falls outside the scoring framework.</p>
+              <div id="gw2"></div>
+            </div>
             <div id="gwResult"></div>
           </div>
 
@@ -233,6 +242,7 @@
           </div>
 
           <div class="card" id="resultsCard"></div>
+          </div>
           <div class="navrow"><button class="btn" data-go="2">← Back</button><button class="btn primary" data-go="4">Next: Summary →</button></div>
         </section>
 
