@@ -1,7 +1,7 @@
 // Rates & thresholds for every financial year — the one place to update each year.
 
 // SINGLE SOURCE OF TRUTH for rates & thresholds. Keyed by the year the FY ENDS ("2027" = FY 2026-27).
-// Used by the Income Tax Calculator, Home Loan take-home sync, Div 296 panel and the Averaging tab.
+// Used by the Income Tax Calculator, Home Loan take-home sync, Div 296 panel, the Averaging tab and the PSI tab.
 // To add a new year: copy the latest block, update every figure, and add an <option> to #fy-select.
 const TAX_DATA = {
     "2027": {
@@ -27,6 +27,7 @@ const TAX_DATA = {
         medicareLow: { lower: 28011, upper: 35013, saptoLower: 44268, saptoUpper: 55335, familyLower: 47238, saptoFamilyLower: 61623, perChildLower: 4338 },
         mlsThresholds: { singleBase: 105000, singleT2: 123000, singleT3: 164000, familyBase: 210000, familyT2: 246000, familyT3: 328000 },
         hecsThresholds: { isMarginal: true, lowerLimit: 69528, upperLimit: 129717, maxCapRate: 0.10 },
+        companyTax: { baseRate: 0.25, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000,
         div296: { large: 3000000, veryLarge: 10000000, largeRate: 0.15, veryLargeRate: 0.10, transitionalEndOnly: true }
     },
@@ -52,6 +53,7 @@ const TAX_DATA = {
         medicareLow: { lower: 28011, upper: 35013, saptoLower: 44268, saptoUpper: 55335, familyLower: 47238, saptoFamilyLower: 61623, perChildLower: 4338 },
         mlsThresholds: { singleBase: 101000, singleT2: 118000, singleT3: 158000, familyBase: 202000, familyT2: 236000, familyT3: 316000 },
         hecsThresholds: { isMarginal: true, lowerLimit: 67000, upperLimit: 125000, maxCapRate: 0.10 },
+        companyTax: { baseRate: 0.25, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     },
     "2025": {
@@ -83,6 +85,7 @@ const TAX_DATA = {
             { min: 119310, rate: 0.075 }, { min: 126468, rate: 0.08 }, { min: 134057, rate: 0.085 },
             { min: 142101, rate: 0.09 }, { min: 150627, rate: 0.095 }, { min: 159664, rate: 0.10 }
         ],
+        companyTax: { baseRate: 0.25, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     },
     "2024": {
@@ -114,6 +117,7 @@ const TAX_DATA = {
             { min: 112985, rate: 0.075 }, { min: 119764, rate: 0.08 }, { min: 126950, rate: 0.085 },
             { min: 134568, rate: 0.09 }, { min: 142642, rate: 0.095 }, { min: 151201, rate: 0.10 }
         ],
+        companyTax: { baseRate: 0.25, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     },
     "2023": {
@@ -145,6 +149,7 @@ const TAX_DATA = {
             { min: 105997, rate: 0.075 }, { min: 112356, rate: 0.08 }, { min: 119098, rate: 0.085 },
             { min: 126244, rate: 0.09 }, { min: 133819, rate: 0.095 }, { min: 141848, rate: 0.10 }
         ],
+        companyTax: { baseRate: 0.25, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     },
     "2022": {
@@ -177,6 +182,7 @@ const TAX_DATA = {
             { min: 103046, rate: 0.075 }, { min: 109228, rate: 0.08 }, { min: 115782, rate: 0.085 },
             { min: 122729, rate: 0.09 }, { min: 130093, rate: 0.095 }, { min: 137898, rate: 0.10 }
         ],
+        companyTax: { baseRate: 0.25, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     },
     "2021": {
@@ -209,6 +215,7 @@ const TAX_DATA = {
             { min: 102180, rate: 0.075 }, { min: 108310, rate: 0.08 }, { min: 114708, rate: 0.085 },
             { min: 121699, rate: 0.09 }, { min: 129000, rate: 0.095 }, { min: 136740, rate: 0.10 }
         ],
+        companyTax: { baseRate: 0.26, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     },
     "2020": {
@@ -241,6 +248,7 @@ const TAX_DATA = {
             { min: 100561, rate: 0.075 }, { min: 106594, rate: 0.08 }, { min: 112990, rate: 0.085 },
             { min: 119770, rate: 0.09 }, { min: 126956, rate: 0.095 }, { min: 134573, rate: 0.10 }
         ],
+        companyTax: { baseRate: 0.275, fullRate: 0.3 },   // base rate entity / full rate
         div293Threshold: 250000
     }
 };
