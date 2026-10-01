@@ -45,7 +45,7 @@ function blankState(){
     client:{name:'', ipp:'', structure:'company', fy:DEFAULT_FY},
     answers:{psi:{}, psb:{}, iva:{}},
     gw1:{}, gw2:{},
-    fin:{ coProfit:0, coRate:'coBase', franking:100, benchmark:0,
+    fin:{ coProfit:0, coRate:'coBase', benchmark:0,
       ipp:{wages:0, super:0, div:0, other:0},
       parties:[],
       opts:{superInF1:true, contribTax:true, div293:true, useF3:false} }
@@ -248,39 +248,27 @@ function rateFor(type, R, custom){
   if (type==='custom') return num(custom)/100; return 0;
 }
 
-/* Net (cash) dividend -> franking credit and grossed-up amount.
-   fr = { rate: company tax rate for franking, pct: franking % as 0–1 } */
-function grossUp(div, fr){
-  const d = num(div);
-  const fc = fr.rate < 1 ? d * fr.rate / (1 - fr.rate) * fr.pct : 0;
-  return {d, fc, gross: d + fc};
-}
-
 /* Tax on an individual's income FROM THE COMPANY (wages, super, dividends).
-   Income tax is the extra tax caused by the company income on top of their other income,
-   less franking credits (can be negative = refund). Medicare levy and offsets excluded. */
-function personTax(p, R, o, fr){
-  const wages = num(p.wages), sup = num(p.super), other = num(p.other);
-  const dv = grossUp(p.div, fr);
-  const assess = wages + dv.gross;
+   Dividends are taxed at their cash amount: no gross-up and no franking credits.
+   Income tax is the extra tax caused by the company income on top of their other income.
+   Medicare levy and offsets excluded. */
+function personTax(p, R, o){
+  const wages = num(p.wages), sup = num(p.super), other = num(p.other), div = num(p.div);
+  const assess = wages + div;
   const income = indTax(other + assess, R) - indTax(other, R);
-  const afterFc = income - dv.fc;
   const contrib = o.contribTax ? sup * R.superTax : 0;
   let d293 = 0;
   if (o.div293 && sup > 0){
     const excess = Math.max(0, other + assess + sup - R.div293Threshold);
     d293 = .15 * Math.min(sup, excess);
   }
-  return {wages, sup, div:dv.d, fc:dv.fc, gross:dv.gross, income, afterFc, contrib, d293,
-          tax: afterFc + contrib + d293, share: wages + sup + dv.gross};
+  return {wages, sup, div, income, contrib, d293, tax: income + contrib + d293, share: wages + sup + div};
 }
 
-/* Tax on a dividend received by a company, trust or super fund shareholder */
-function entityTax(p, R, fr){
-  const dv = grossUp(p.div, fr), rate = rateFor(p.type, R, p.rate);
-  let tax = dv.gross * rate - dv.fc;
-  if (p.type !== 'smsf') tax = Math.max(0, tax);   // excess franking credits refundable only to individuals & super funds
-  return {div:dv.d, fc:dv.fc, gross:dv.gross, rate, tax, share:dv.gross};
+/* Tax on a dividend received by a company, trust or super fund shareholder (cash amount × its rate) */
+function entityTax(p, R){
+  const div = num(p.div), rate = rateFor(p.type, R, p.rate);
+  return {div, rate, tax: div * rate, share: div};
 }
 
 function f1Score(p){ if(p>90)return 1; if(p>75)return 2; if(p>60)return 3; if(p>=50)return 4; if(p>25)return 5; return 6; }
@@ -295,37 +283,37 @@ const r4 = x => Math.round(x*10000)/10000;
 /* PCG 2021/4 for a company with one IPP.
    Profit entitlement (E) = company net profit before tax
                           + wages & super paid to the IPP and related parties (added back).
-   Where the profit ends up: wages + super + grossed-up dividends for each person;
-                             whatever isn't paid out stays in the company (pre-tax).
-   Where the tax is paid:    company tax + each person's tax after franking credits. */
+   Where the profit ends up (Factor 1), in cash terms as per the accounts:
+       wages + super + cash dividends for each person, company tax,
+       and the after-tax profit retained in the company.
+   Where the tax is paid (Factor 2): company tax + each person's tax on what they received.
+   Franking credits are not used anywhere: dividends are always taken at their cash amount. */
 function compute(fin, fy){
   const R = RATES[fy] || RATES[DEFAULT_FY]; const o = fin.opts;
   const r = fin.coRate === 'coFull' ? R.coFull : R.coBase;
-  const fr = {rate:r, pct: Math.min(100, Math.max(0, num(fin.franking))) / 100};
   const profit = num(fin.coProfit);
   const coTax = Math.max(0, profit) * r;
 
-  const ipp = personTax(fin.ipp, R, o, fr);
+  const ipp = personTax(fin.ipp, R, o);
   const people = [{name: S.client.ipp || 'Principal (IPP)', kind:'IPP', isIpp:true, ind:true, d:ipp}];
   fin.parties.forEach(p => {
     const ind = !!TYPES[p.type]?.individual;
     people.push({id:p.id, name: p.name || (ind ? 'Related individual' : 'Related entity'), kind: TYPES[p.type].label, ind,
-                 d: ind ? personTax(p, R, o, fr) : entityTax(p, R, fr)});
+                 d: ind ? personTax(p, R, o) : entityTax(p, R)});
   });
 
   const ippWagesSuper = ipp.wages + ipp.sup;
   const relWagesSuper = people.filter(x => x.ind && !x.isIpp).reduce((a, x) => a + x.d.wages + x.d.sup, 0);
   const E = profit + ippWagesSuper + relWagesSuper;
-  const grossDivs = people.reduce((a, x) => a + x.d.gross, 0);
   const netDivs = people.reduce((a, x) => a + x.d.div, 0);
-  const retained = profit - grossDivs;                  // pre-tax; negative = prior-year profits paid out
   const afterTaxProfit = Math.max(0, profit) - coTax;
-  const priorYear = Math.max(0, netDivs - afterTaxProfit);
+  const retained = afterTaxProfit - netDivs;             // after tax; negative = paid from prior-year profits
+  const priorYear = Math.max(0, -retained);
   const personalTax = people.reduce((a, x) => a + x.d.tax, 0);
   const totalTax = coTax + personalTax;
 
   const denom = E;
-  const ippReturned = ipp.wages + ipp.gross + (o.superInF1 ? ipp.sup : 0);
+  const ippReturned = ipp.wages + ipp.div + (o.superInF1 ? ipp.sup : 0);
   const f1 = denom > 0 ? r4(ippReturned / denom * 100) : 0;
   const f2 = denom > 0 ? r4(totalTax / denom * 100) : 0;
   const bench = num(fin.benchmark);
@@ -335,7 +323,7 @@ function compute(fin, fy){
   const n = useF3 ? 3 : 2; const total = s1 + s2 + (s3 || 0);
   const auto = f1 >= 100;
   const zone = denom <= 0 ? null : (auto ? 'green' : zoneFor(total, n));
-  return {R, r, fr, profit, coTax, people, ipp, ippWagesSuper, relWagesSuper, E, grossDivs, netDivs, retained,
+  return {R, r, profit, coTax, people, ipp, ippWagesSuper, relWagesSuper, E, netDivs, retained,
           afterTaxProfit, priorYear, personalTax, totalTax, denom, ippReturned, f1, f2, f3, s1, s2, s3, n, total, auto, zone};
 }
 
@@ -345,7 +333,7 @@ function pathToGreen(){
   const base = compute(S.fin, S.client.fy);
   if (!base.zone || base.zone === 'green') return null;
   const partyNet = S.fin.parties.reduce((a, p) => a + num(p.div), 0);
-  const retainedNet = Math.max(0, base.retained) * (1 - base.r);   // after company tax, available as dividends
+  const retainedNet = Math.max(0, base.retained);   // after-tax profit still in the company, available as dividends
   const movable = partyNet + retainedNet;
   if (movable <= 0) return {none:true};
   const step = Math.max(50, movable / 400);
@@ -394,14 +382,14 @@ const refundOr = n => n < 0 ? `${money(-n)} refund` : money(n);
 function taxBreak(d){
   if (d.income === undefined){   // entity shareholder
     if (!d.div) return 'No dividend entered.';
-    return `Dividend ${money(d.div)} + franking credits ${money(d.fc)} = <strong>${money(d.gross)}</strong> × ${(d.rate*100).toFixed(1)}% less franking credits → tax <strong>${refundOr(d.tax)}</strong>`;
+    return `Dividend ${money(d.div)} × ${(d.rate*100).toFixed(1)}% → tax <strong>${money(d.tax)}</strong>`;
   }
   const parts = [];
   if (d.wages) parts.push(`wages ${money(d.wages)}`);
-  if (d.div) parts.push(`dividend ${money(d.div)} + franking credits ${money(d.fc)}`);
+  if (d.div) parts.push(`dividend ${money(d.div)}`);
   if (!parts.length && !d.sup) return 'Nothing entered from the company.';
   let s = '';
-  if (parts.length) s += `${parts.join(' + ')} → income tax <strong>${money(d.income)}</strong>${d.fc?` less franking credits ${money(d.fc)}`:''} = <strong>${refundOr(d.afterFc)}</strong>`;
+  if (parts.length) s += `${parts.join(' + ')} → income tax <strong>${money(d.income)}</strong>`;
   if (d.sup) s += `${s?' · ':''}super ${money(d.sup)} → contributions tax <strong>${money(d.contrib)}</strong>`;
   if (d.d293) s += ` · Div 293 <strong>${money(d.d293)}</strong>`;
   s += ` · <b>Total ${refundOr(d.tax)}</b>`;
@@ -425,7 +413,7 @@ function renderResults(){
       <tr><td>+ Wages &amp; super paid to related parties</td><td class="n">${money(c.relWagesSuper)}</td></tr>
       <tr class="sum"><td>= IPP's total profit entitlement</td><td class="n">${money(c.E)}</td></tr>
       <tr><td class="muted">Company tax at ${(c.r*100).toFixed(1)}% · after-tax profit this year</td><td class="n muted">${money(c.coTax)} · ${money(c.afterTaxProfit)}</td></tr>
-      <tr><td class="muted">Dividends declared (net cash) · franking credits attached</td><td class="n muted">${money(c.netDivs)} · ${money(c.grossDivs - c.netDivs)}</td></tr>
+      <tr><td class="muted">Dividends declared (cash) · retained after tax</td><td class="n muted">${money(c.netDivs)} · ${money(c.retained)}</td></tr>
     </table>`;
 
   let h = `<h2>PCG 2021/4 result</h2>`;
@@ -435,12 +423,13 @@ function renderResults(){
   // Table 1: where the profit ends up
   const share = x => c.E ? pct(x / c.E * 100) : '–';
   h += `<h3>Where the profit ends up (Factor 1)</h3>
-    <table class="t"><thead><tr><th>Recipient</th><th class="n">Wages &amp; super</th><th class="n">Dividends (grossed-up)</th><th class="n">Total</th><th class="n">% of profit</th></tr></thead><tbody>`;
+    <table class="t"><thead><tr><th>Recipient</th><th class="n">Wages &amp; super</th><th class="n">Dividends (cash)</th><th class="n">Total</th><th class="n">% of profit</th></tr></thead><tbody>`;
   c.people.forEach(x => {
     const ws = x.ind ? x.d.wages + x.d.sup : 0;
-    h += `<tr${x.isIpp?' class="ipp"':''}><td>${esc(x.name)}<br><span class="muted" style="font-size:12px">${esc(x.kind)}</span></td><td class="n">${x.ind?money(ws):'–'}</td><td class="n">${money(x.d.gross)}</td><td class="n">${money(x.d.share)}</td><td class="n">${share(x.d.share)}</td></tr>`;
+    h += `<tr${x.isIpp?' class="ipp"':''}><td>${esc(x.name)}<br><span class="muted" style="font-size:12px">${esc(x.kind)}</span></td><td class="n">${x.ind?money(ws):'–'}</td><td class="n">${money(x.d.div)}</td><td class="n">${money(x.d.share)}</td><td class="n">${share(x.d.share)}</td></tr>`;
   });
-  h += `<tr><td>${c.retained >= 0 ? 'Retained in the company (not yet paid out, before tax)' : 'Paid out of prior-year retained profits'}</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.retained)}</td><td class="n">${share(c.retained)}</td></tr>`;
+  h += `<tr><td>Company tax</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.coTax)}</td><td class="n">${share(c.coTax)}</td></tr>`;
+  h += `<tr><td>${c.retained >= 0 ? 'Retained in the company (after tax, not yet paid out)' : 'Paid out of prior-year retained profits'}</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.retained)}</td><td class="n">${share(c.retained)}</td></tr>`;
   h += `</tbody><tfoot><tr><td colspan="3">Total profit entitlement</td><td class="n">${money(c.E)}</td><td class="n">100.00%</td></tr></tfoot></table>`;
 
   // Table 2: where the tax is paid
@@ -449,8 +438,8 @@ function renderResults(){
     <tr><td>Company</td><td class="muted">${money(c.profit)} net profit × ${(c.r*100).toFixed(1)}%</td><td class="n">${money(c.coTax)}</td></tr>`;
   c.people.forEach(x => {
     if (!x.d.share) return;
-    const on = x.ind ? [x.d.wages?`wages ${money(x.d.wages)}`:'', x.d.gross?`dividends ${money(x.d.gross)} less franking credits`:'', x.d.sup&&(S.fin.opts.contribTax||x.d.d293)?`super ${money(x.d.sup)}`:''].filter(Boolean).join(' · ')
-                     : `dividend ${money(x.d.gross)} less franking credits`;
+    const on = x.ind ? [x.d.wages?`wages ${money(x.d.wages)}`:'', x.d.div?`dividends ${money(x.d.div)}`:'', x.d.sup&&(S.fin.opts.contribTax||x.d.d293)?`super ${money(x.d.sup)}`:''].filter(Boolean).join(' · ')
+                     : `dividend ${money(x.d.div)} × ${(x.d.rate*100).toFixed(1)}%`;
     h += `<tr><td>${esc(x.name)}</td><td class="muted">${on}</td><td class="n">${refundOr(x.d.tax)}</td></tr>`;
   });
   h += `</tbody><tfoot><tr><td colspan="2">Total tax on the profit entitlement · effective tax rate ${pct(c.f2)}</td><td class="n">${money(c.totalTax)}</td></tr></tfoot></table>`;
@@ -514,7 +503,7 @@ function recommendations(){
   if (S.fin.parties.some(p=>TYPES[p.type]?.individual && (num(p.wages)>0 || num(p.super)>0))) out.push('Document the services performed, hours and market rate for each related individual receiving wages/super to support "reasonable remuneration for bona fide services".');
   if (!gw.pass) out.push('One or more PCG 2021/4 gateway indicators are present — the risk score cannot be relied on. Consider restructuring or a private ruling.');
   if (S.fin.parties.some(p=>p.type==='smsf')) out.push('Income is flowing to a super fund/SMSF — this is a listed high-risk feature. Review under the non-arm\'s-length income rules as well as PCG 2021/4.');
-  if (c.denom>0 && c.retained>1) out.push(`${money(c.retained)} of this year's profit (before tax) is retained in the company. It counts against Factor 1 until paid to the IPP; record the expected timing of future dividends.`);
+  if (c.denom>0 && c.retained>1) out.push(`${money(c.retained)} of this year's after-tax profit is retained in the company. It counts against Factor 1 until paid to the IPP; record the expected timing of future dividends.`);
   if (c.priorYear>1) out.push(`Dividends include about ${money(c.priorYear)} paid from prior-year retained profits. Note this in the file, as it lifts Factor 1 for this year only.`);
   if (c.denom>0 && S.fin.parties.some(p=>!TYPES[p.type]?.individual && num(p.div)>0)) out.push('Dividends are paid to a company or trust shareholder. Check for Division 7A loans or unpaid present entitlements that effectively return funds to the IPP or associates.');
   if (c.zone==='amber' || c.zone==='red'){
@@ -567,14 +556,15 @@ function fileNote(){
     L.push(`  Add back salary & super to the IPP: ${money(c.ippWagesSuper)}`);
     L.push(`  Add back wages & super to related parties: ${money(c.relWagesSuper)}`);
     L.push(`  IPP's total profit entitlement: ${money(c.E)}`);
-    L.push(`  Dividends declared (net cash): ${money(c.netDivs)}, franked ${Math.round(c.fr.pct*100)}% at ${(c.r*100).toFixed(1)}%`);
+    L.push(`  Dividends declared (cash): ${money(c.netDivs)} (franking credits not taken into account)`);
     if (c.priorYear>1) L.push(`  Note: ${money(c.priorYear)} of dividends paid from prior-year retained profits.`);
     L.push('  Where the profit ends up:');
-    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name} (${x.kind}): ${money(x.d.share)} (${pct(x.d.share/c.E*100)})${x.d.gross?` incl. grossed-up dividends ${money(x.d.gross)}`:''}`); });
-    L.push(`   - ${c.retained>=0?'Retained in company (pre-tax)':'Paid from prior-year retained profits'}: ${money(c.retained)} (${pct(c.retained/c.E*100)})`);
+    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name} (${x.kind}): ${money(x.d.share)} (${pct(x.d.share/c.E*100)})${x.d.div?` incl. cash dividends ${money(x.d.div)}`:''}`); });
+    L.push(`   - Company tax: ${money(c.coTax)} (${pct(c.coTax/c.E*100)})`);
+    L.push(`   - ${c.retained>=0?'Retained in company (after tax)':'Paid from prior-year retained profits'}: ${money(c.retained)} (${pct(c.retained/c.E*100)})`);
     L.push('  Where the tax is paid:');
     L.push(`   - Company tax: ${money(c.coTax)}`);
-    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name}: ${refundOr(x.d.tax)} (after franking credits)`); });
+    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name}: ${money(x.d.tax)}`); });
     L.push(`  Total tax: ${money(c.totalTax)}`);
     L.push(`  Factor 1 – returned to IPP: ${pct(c.f1)} → score ${c.s1}`);
     L.push(`  Factor 2 – effective tax rate: ${pct(c.f2)} → score ${c.s2}`);

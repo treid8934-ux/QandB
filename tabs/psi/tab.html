@@ -218,16 +218,14 @@
               <label class="f">Company net profit before tax ($)<input type="text" class="money" id="fin_total" data-fin="coProfit" inputmode="decimal" placeholder="0"><span class="fhint">After all business expenses, including wages and super paid to the IPP and related parties.</span></label>
               <label class="f">Company tax rate
                 <select data-fin="coRate"><option value="coBase">Base rate entity</option><option value="coFull">Full rate</option></select>
-                <span class="fhint">Also used for the franking rate on dividends.</span>
               </label>
-              <label class="f">Dividends franked (%)<input type="text" class="money" data-fin="franking" inputmode="decimal" placeholder="100"><span class="fhint">100 = fully franked.</span></label>
             </div>
 
             <h3>Principal (IPP)</h3>
             <div class="grid">
               <label class="f">Salary / wages paid by the company ($)<input type="text" class="money" data-ipp="wages" inputmode="decimal" placeholder="0"></label>
               <label class="f">Super paid by the company ($)<input type="text" class="money" data-ipp="super" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Dividend received – net cash ($)<input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint">The amount paid, not grossed up. Franking credits are added automatically.</span></label>
+              <label class="f">Dividend received – net cash ($)<input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint">The cash amount paid. Franking credits are not taken into account.</span></label>
               <label class="f">Other taxable income, not from the company ($)<input type="text" class="money" data-ipp="other" inputmode="decimal" placeholder="0"><span class="fhint">Used only to work out their marginal rate.</span></label>
             </div>
             <div class="taxline" id="ippTax"></div>
