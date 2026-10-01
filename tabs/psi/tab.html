@@ -101,6 +101,9 @@
 #psi-tool .gw{border:1px solid var(--line);border-radius:10px;padding:4px 14px 8px;margin-bottom:12px;background:#fcfcfd}
 #psi-tool .gw h3{margin:12px 0 4px}
 #psi-tool .gwlead{font-size:12.5px;color:var(--muted);margin:0 0 6px}
+#psi-tool .fhint{font-size:11.5px;color:var(--muted);font-weight:400}
+#psi-tool table.t tr.sum td{font-weight:700;border-top:2px solid var(--ink)}
+#psi-tool table.t tr.ipp td{background:#f7f9fc}
 #psi-tool .gwhint{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 /* Put back browser defaults that the suite's base styles (Tailwind) reset */
 #psi-tool h1,#psi-tool h2,#psi-tool h3{font-weight:700}
@@ -207,29 +210,35 @@
 
           <div class="card">
             <h2>3c · PCG 2021/4 risk scoring</h2>
-            <p class="lead">Enter the income from the firm and how it's allocated. Tax is calculated using the rates table for the selected year (Medicare and other levies excluded, per the ATO method).</p>
+            <p class="lead">Set up for a company with one IPP. Works out the IPP's total profit entitlement from the company, where that profit ends up and where it is taxed. Tax uses the rates for the selected year (Medicare levy and offsets excluded, per the ATO method).</p>
+            <div id="coNote"></div>
 
-            <h3>Firm income</h3>
+            <h3>Company</h3>
             <div class="grid">
-              <label class="f">Total profit entitlement of the IPP from the firm group ($)<input type="text" class="money" id="fin_total" data-fin="total" inputmode="decimal" placeholder="0"></label>
-              <label class="f">IPP's share of profits retained in firm ($)<input type="text" class="money" data-fin="retained" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Tax rate on retained profits
-                <select data-fin="retainedRate"><option value="coBase">Company – base rate entity</option><option value="coFull">Company – full rate</option><option value="top">Trustee (s99A top rate)</option></select>
+              <label class="f">Company net profit before tax ($)<input type="text" class="money" id="fin_total" data-fin="coProfit" inputmode="decimal" placeholder="0"><span class="fhint">After all business expenses, including wages and super paid to the IPP and related parties.</span></label>
+              <label class="f">Company tax rate
+                <select data-fin="coRate"><option value="coBase">Base rate entity</option><option value="coFull">Full rate</option></select>
+                <span class="fhint">Also used for the franking rate on dividends.</span>
               </label>
+              <label class="f">Dividends franked (%)<input type="text" class="money" data-fin="franking" inputmode="decimal" placeholder="100"><span class="fhint">100 = fully franked.</span></label>
             </div>
 
             <h3>Principal (IPP)</h3>
             <div class="grid">
-              <label class="f">Salary / wages ($)<input type="text" class="money" data-ipp="wages" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Super contributions ($)<input type="text" class="money" data-ipp="super" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Distributions / dividends (grossed-up) ($)<input type="text" class="money" data-ipp="dist" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Other taxable income, not from firm ($)<input type="text" class="money" data-ipp="other" inputmode="decimal" placeholder="0"></label>
+              <label class="f">Salary / wages paid by the company ($)<input type="text" class="money" data-ipp="wages" inputmode="decimal" placeholder="0"></label>
+              <label class="f">Super paid by the company ($)<input type="text" class="money" data-ipp="super" inputmode="decimal" placeholder="0"></label>
+              <label class="f">Dividend received – net cash ($)<input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint">The amount paid, not grossed up. Franking credits are added automatically.</span></label>
+              <label class="f">Other taxable income, not from the company ($)<input type="text" class="money" data-ipp="other" inputmode="decimal" placeholder="0"><span class="fhint">Used only to work out their marginal rate.</span></label>
             </div>
             <div class="taxline" id="ippTax"></div>
 
-            <h3>Related parties &amp; associated entities</h3>
+            <h3>Related parties &amp; other shareholders</h3>
+            <p class="gwlead">Add anyone else paid wages or super by the company, or paid a dividend. If a family trust holds shares, add the beneficiaries who receive the dividend as related parties instead.</p>
             <div id="parties"></div>
             <button class="btn small" id="addParty">+ Add related party</button>
+
+            <h3>Profit entitlement</h3>
+            <div id="buildup"></div>
 
             <h3>Options</h3>
             <div class="toggles">
