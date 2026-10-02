@@ -101,6 +101,11 @@
 #psi-tool .gw{border:1px solid var(--line);border-radius:10px;padding:4px 14px 8px;margin-bottom:12px;background:#fcfcfd}
 #psi-tool .gw h3{margin:12px 0 4px}
 #psi-tool .gwlead{font-size:12.5px;color:var(--muted);margin:0 0 6px}
+#psi-tool .btn.add{display:block;width:100%;padding:14px 16px;margin-top:4px;font-size:15px;font-weight:700;text-align:center;color:var(--navy);background:var(--accent-soft);border:2px dashed var(--accent);border-radius:10px}
+#psi-tool .btn.add:hover{background:var(--accent);color:#fff;border-style:solid}
+#psi-tool .btn.add .plus{display:inline-block;width:22px;height:22px;line-height:20px;margin-right:6px;border-radius:50%;background:var(--accent);color:#fff;font-size:17px}
+#psi-tool .btn.add:hover .plus{background:#fff;color:var(--accent)}
+#psi-tool .btn.add .addsub{display:block;margin-top:3px;font-size:12px;font-weight:400;opacity:.8}
 #psi-tool .fhint{font-size:11.5px;color:var(--muted);font-weight:400}
 #psi-tool table.t tr.sum td{font-weight:700;border-top:2px solid var(--ink)}
 #psi-tool table.t tr.ipp td{background:#f7f9fc}
@@ -210,30 +215,34 @@
 
           <div class="card">
             <h2>3c · PCG 2021/4 risk scoring</h2>
-            <p class="lead">Set up for a company with one IPP. Works out the IPP's total profit entitlement from the company, where that profit ends up and where it is taxed. Tax uses the rates for the selected year (Medicare levy and offsets excluded, per the ATO method).</p>
+            <p class="lead">For a company or trust with one IPP. Works out the IPP's total profit entitlement, where that profit ends up and where it is taxed. Tax uses the rates for the selected year (Medicare levy and offsets excluded, per the ATO method).</p>
             <div id="coNote"></div>
 
-            <h3>Company</h3>
+            <h3>Entity</h3>
             <div class="grid">
-              <label class="f">Company net profit before tax ($)<input type="text" class="money" id="fin_total" data-fin="coProfit" inputmode="decimal" placeholder="0"><span class="fhint">After all business expenses, including wages and super paid to the IPP and related parties.</span></label>
-              <label class="f">Company tax rate
+              <label class="f">Entity type
+                <select data-fin="entity"><option value="company">Company</option><option value="trust">Trust</option></select>
+                <span class="fhint">A trust pays no tax itself; its income is taxed to the beneficiaries.</span>
+              </label>
+              <label class="f"><span><span data-w="profit">Company net profit before tax</span> ($)</span><input type="text" class="money" id="fin_total" data-fin="coProfit" inputmode="decimal" placeholder="0"><span class="fhint">After all business expenses, including wages and super paid to the IPP and related parties.</span></label>
+              <label class="f" id="coRateWrap">Company tax rate
                 <select data-fin="coRate"><option value="coBase">Base rate entity</option><option value="coFull">Full rate</option></select>
               </label>
             </div>
 
             <h3>Principal (IPP)</h3>
             <div class="grid">
-              <label class="f">Salary / wages paid by the company ($)<input type="text" class="money" data-ipp="wages" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Super paid by the company ($)<input type="text" class="money" data-ipp="super" inputmode="decimal" placeholder="0"></label>
-              <label class="f">Dividend received – net cash ($)<input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint">The cash amount paid. Franking credits are not taken into account.</span></label>
-              <label class="f">Other taxable income, not from the company ($)<input type="text" class="money" data-ipp="other" inputmode="decimal" placeholder="0"><span class="fhint">Used only to work out their marginal rate.</span></label>
+              <label class="f"><span>Salary / wages paid by the <span data-w="ent">company</span> ($)</span><input type="text" class="money" data-ipp="wages" inputmode="decimal" placeholder="0"></label>
+              <label class="f"><span>Super paid by the <span data-w="ent">company</span> ($)</span><input type="text" class="money" data-ipp="super" inputmode="decimal" placeholder="0"></label>
+              <label class="f"><span data-w="payLabel">Dividend received – net cash ($)</span><input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint" data-w="payHint">The cash amount paid. Franking credits are not taken into account.</span></label>
+              <label class="f"><span>Other taxable income, not from the <span data-w="ent">company</span> ($)</span><input type="text" class="money" data-ipp="other" inputmode="decimal" placeholder="0"><span class="fhint">Used only to work out their marginal rate.</span></label>
             </div>
             <div class="taxline" id="ippTax"></div>
 
-            <h3>Related parties &amp; other shareholders</h3>
-            <p class="gwlead">Add anyone else paid wages or super by the company, or paid a dividend. If a family trust holds shares, add the beneficiaries who receive the dividend as related parties instead.</p>
+            <h3>Related parties &amp; other <span data-w="holders">shareholders</span></h3>
+            <p class="gwlead" data-w="partyHint"></p>
             <div id="parties"></div>
-            <button class="btn small" id="addParty">+ Add related party</button>
+            <button class="btn add" id="addParty"><span class="plus">+</span> Add related party<span class="addsub">Spouse, family member, bucket company or anyone else paid by the entity</span></button>
 
             <h3>Profit entitlement</h3>
             <div id="buildup"></div>

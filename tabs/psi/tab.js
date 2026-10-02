@@ -45,13 +45,27 @@ function blankState(){
     client:{name:'', ipp:'', structure:'company', fy:DEFAULT_FY},
     answers:{psi:{}, psb:{}, iva:{}},
     gw1:{}, gw2:{},
-    fin:{ coProfit:0, coRate:'coBase', benchmark:0,
+    fin:{ entity:'company', coProfit:0, coRate:'coBase', benchmark:0,
       ipp:{wages:0, super:0, div:0, other:0},
       parties:[],
       opts:{superInF1:true, contribTax:true, div293:true, useF3:false} }
   };
 }
 let S = blankState();
+
+/* 3C works for a company or a trust (chosen in 3C). The wording follows that choice. */
+const WORDS = {
+  company:{ent:'company', Ent:'Company', pay:'dividend', Pay:'Dividend', pays:'dividends', Pays:'Dividends',
+    profit:'Company net profit before tax', holders:'shareholders',
+    payLabel:'Dividend received – net cash ($)', payHint:'The cash amount paid. Franking credits are not taken into account.',
+    partyHint:'Add anyone else paid wages or super by the company, or paid a dividend. If a family trust holds shares, add the beneficiaries who receive the dividend as related parties instead.'},
+  trust:{ent:'trust', Ent:'Trust', pay:'distribution', Pay:'Distribution', pays:'distributions', Pays:'Distributions',
+    profit:'Trust net income before distributions', holders:'beneficiaries',
+    payLabel:'Distribution received ($)', payHint:"Their share of the trust's net income for the year.",
+    partyHint:'Add anyone else paid wages or super by the trust, and every other beneficiary who receives a distribution (e.g. spouse, adult children, a bucket company).'}
+};
+const W = () => WORDS[S.fin.entity] || WORDS.company;
+const isTrust = () => S.fin.entity === 'trust';
 
 /* =========================================================
    FLOWCHARTS
@@ -107,7 +121,7 @@ const FLOWS = {
       return 'rel';
     }, nodes:{
     rel:{ref:'Part IVA ITAA 1936', q:'Is any of the income paid to a family member (other than a spouse in a genuine husband-and-wife partnership) or other related entity of the principal worker?',
-       hint:'Includes wages, super, distributions or dividends to associates, family trusts or bucket companies.', yes:'reas', no:'ent'},
+       hint:()=> isTrust() ? 'Includes wages, super or trust distributions to associates, other trusts or bucket companies.' : 'Includes wages, super or dividends to associates, family trusts or bucket companies.', yes:'reas', no:'ent'},
     reas:{ref:'Part IVA', q:'Is each amount reasonable remuneration for bona fide services actually performed?',
        hint:'Compare to what an arm\'s-length person would be paid for the same work. Tip: use the related-party rows in 3c to document hours and duties.', yes:'ent', no:'@IVA_MAY'},
     ent:{auto:true},
@@ -158,7 +172,7 @@ function renderFlow(flow){
     const n = FLOWS[flow].nodes[id]; const a = S.answers[flow][id];
     h += `<div class="node ${a!==undefined?'answered':''}">
       <div class="ref">${esc(n.ref)}</div><div class="q">${n.q}</div>
-      ${n.hint?`<div class="hint">${n.hint}</div>`:''}
+      ${n.hint?`<div class="hint">${typeof n.hint==='function'?n.hint():n.hint}</div>`:''}
       <div class="yn">
         <button data-flow="${flow}" data-node="${id}" data-val="1" class="${a===true?'sel-yes':''}">Yes</button>
         <button data-flow="${flow}" data-node="${id}" data-val="0" class="${a===false?'sel-no':''}">No</button>
@@ -280,7 +294,10 @@ function zoneFor(total, n){
 }
 const r4 = x => Math.round(x*10000)/10000;
 
-/* PCG 2021/4 for a company with one IPP.
+/* PCG 2021/4 for a company or trust with one IPP.
+   TRUST: no tax at entity level. Income distributed is taxed to each beneficiary;
+          anything not distributed is taxed to the trustee at the top rate (s99A).
+   COMPANY:
    Profit entitlement (E) = company net profit before tax
                           + wages & super paid to the IPP and related parties (added back).
    Where the profit ends up (Factor 1), in cash terms as per the accounts:
@@ -290,7 +307,8 @@ const r4 = x => Math.round(x*10000)/10000;
    Franking credits are not used anywhere: dividends are always taken at their cash amount. */
 function compute(fin, fy){
   const R = RATES[fy] || RATES[DEFAULT_FY]; const o = fin.opts;
-  const r = fin.coRate === 'coFull' ? R.coFull : R.coBase;
+  const trust = fin.entity === 'trust';
+  const r = trust ? 0 : (fin.coRate === 'coFull' ? R.coFull : R.coBase);
   const profit = num(fin.coProfit);
   const coTax = Math.max(0, profit) * r;
 
@@ -307,10 +325,12 @@ function compute(fin, fy){
   const E = profit + ippWagesSuper + relWagesSuper;
   const netDivs = people.reduce((a, x) => a + x.d.div, 0);
   const afterTaxProfit = Math.max(0, profit) - coTax;
-  const retained = afterTaxProfit - netDivs;             // after tax; negative = paid from prior-year profits
+  const retained = afterTaxProfit - netDivs;             // company: after tax, negative = paid from prior-year profits
+                                                         // trust: income not distributed (before trustee tax)
+  const trusteeTax = trust ? Math.max(0, retained) * R.top : 0;
   const priorYear = Math.max(0, -retained);
   const personalTax = people.reduce((a, x) => a + x.d.tax, 0);
-  const totalTax = coTax + personalTax;
+  const totalTax = coTax + trusteeTax + personalTax;
 
   const denom = E;
   const ippReturned = ipp.wages + ipp.div + (o.superInF1 ? ipp.sup : 0);
@@ -323,7 +343,7 @@ function compute(fin, fy){
   const n = useF3 ? 3 : 2; const total = s1 + s2 + (s3 || 0);
   const auto = f1 >= 100;
   const zone = denom <= 0 ? null : (auto ? 'green' : zoneFor(total, n));
-  return {R, r, profit, coTax, people, ipp, ippWagesSuper, relWagesSuper, E, netDivs, retained,
+  return {R, r, trust, trusteeTax, profit, coTax, people, ipp, ippWagesSuper, relWagesSuper, E, netDivs, retained,
           afterTaxProfit, priorYear, personalTax, totalTax, denom, ippReturned, f1, f2, f3, s1, s2, s3, n, total, auto, zone};
 }
 
@@ -366,28 +386,28 @@ function partyHTML(p){
       ${p.type==='custom'?`<label class="f">Tax rate (%)<input type="text" class="money" data-p="rate" value="${esc(p.rate)}" inputmode="decimal"></label>`:''}
     </div>
     <div class="grid" style="margin-top:8px">
-      ${ind?`<label class="f">Wages paid by the company ($)<input type="text" class="money" data-p="wages" value="${v('wages')}" inputmode="decimal" placeholder="0"></label>
-      <label class="f">Super paid by the company ($)<input type="text" class="money" data-p="super" value="${v('super')}" inputmode="decimal" placeholder="0"></label>`:''}
-      <label class="f">Dividend received – net cash ($)<input type="text" class="money" data-p="div" value="${v('div')}" inputmode="decimal" placeholder="0"></label>
-      ${ind?`<label class="f">Other taxable income, not from the company ($)<input type="text" class="money" data-p="other" value="${v('other')}" inputmode="decimal" placeholder="0"></label>`:''}
+      ${ind?`<label class="f">Wages paid by the ${W().ent} ($)<input type="text" class="money" data-p="wages" value="${v('wages')}" inputmode="decimal" placeholder="0"></label>
+      <label class="f">Super paid by the ${W().ent} ($)<input type="text" class="money" data-p="super" value="${v('super')}" inputmode="decimal" placeholder="0"></label>`:''}
+      <label class="f">${W().payLabel}<input type="text" class="money" data-p="div" value="${v('div')}" inputmode="decimal" placeholder="0"></label>
+      ${ind?`<label class="f">Other taxable income, not from the ${W().ent} ($)<input type="text" class="money" data-p="other" value="${v('other')}" inputmode="decimal" placeholder="0"></label>`:''}
     </div>
     ${ind?`<label class="f" style="margin-top:8px">Services performed / hours (for reasonableness)<input type="text" data-p="duties" value="${esc(p.duties||'')}" placeholder="e.g. bookkeeping 6 hrs/week, admin"></label>`:''}
     <div class="taxline" data-taxline="${p.id}"></div>
   </div>`;
 }
 function renderParties(){
-  $('#parties').innerHTML = S.fin.parties.length ? S.fin.parties.map(partyHTML).join('') : '<p class="muted" style="font-size:13px">No related parties added. Add a spouse or family member on the payroll, or a shareholder such as a bucket company.</p>';
+  $('#parties').innerHTML = S.fin.parties.length ? S.fin.parties.map(partyHTML).join('') : `<p class="muted" style="font-size:13px">No related parties added yet. Add a spouse or family member on the payroll, or another of the ${W().holders} such as a bucket company.</p>`;
 }
 const refundOr = n => n < 0 ? `${money(-n)} refund` : money(n);
 function taxBreak(d){
   if (d.income === undefined){   // entity shareholder
-    if (!d.div) return 'No dividend entered.';
-    return `Dividend ${money(d.div)} × ${(d.rate*100).toFixed(1)}% → tax <strong>${money(d.tax)}</strong>`;
+    if (!d.div) return `No ${W().pay} entered.`;
+    return `${W().Pay} ${money(d.div)} × ${(d.rate*100).toFixed(1)}% → tax <strong>${money(d.tax)}</strong>`;
   }
   const parts = [];
   if (d.wages) parts.push(`wages ${money(d.wages)}`);
-  if (d.div) parts.push(`dividend ${money(d.div)}`);
-  if (!parts.length && !d.sup) return 'Nothing entered from the company.';
+  if (d.div) parts.push(`${W().pay} ${money(d.div)}`);
+  if (!parts.length && !d.sup) return `Nothing entered from the ${W().ent}.`;
   let s = '';
   if (parts.length) s += `${parts.join(' + ')} → income tax <strong>${money(d.income)}</strong>`;
   if (d.sup) s += `${s?' · ':''}super ${money(d.sup)} → contributions tax <strong>${money(d.contrib)}</strong>`;
@@ -403,43 +423,61 @@ function renderResults(){
     if (el) el.innerHTML = taxBreak(x.d);
   });
   $('#benchWrap').style.display = S.fin.opts.useF3 ? '' : 'none';
-  $('#coNote').innerHTML = S.client.structure === 'company' ? '' :
-    `<div class="warn">3C is set up for a company. The structure in Step 1 is set to ${esc({sole:'sole trader',trust:'trust',partnership:'partnership'}[S.client.structure])}, so treat these results with care.</div>`;
+  const w = W();
+  // labels that follow the entity type
+  $$('[data-w]').forEach(el => { el.textContent = w[el.dataset.w]; });
+  $('#coRateWrap').style.display = c.trust ? 'none' : '';
+  const st = S.client.structure;
+  $('#coNote').innerHTML = (st === 'company' || st === 'trust') ? '' :
+    `<div class="warn">3C works for a company or a trust. The structure in Step 1 is set to ${esc({sole:'sole trader',partnership:'partnership'}[st])}, so treat these results with care.</div>`;
 
   // Profit entitlement build-up (shown under the inputs)
   $('#buildup').innerHTML = `<table class="t">
-      <tr><td>Company net profit before tax</td><td class="n">${money(c.profit)}</td></tr>
+      <tr><td>${w.profit}</td><td class="n">${money(c.profit)}</td></tr>
       <tr><td>+ Salary &amp; super paid to the IPP</td><td class="n">${money(c.ippWagesSuper)}</td></tr>
       <tr><td>+ Wages &amp; super paid to related parties</td><td class="n">${money(c.relWagesSuper)}</td></tr>
       <tr class="sum"><td>= IPP's total profit entitlement</td><td class="n">${money(c.E)}</td></tr>
-      <tr><td class="muted">Company tax at ${(c.r*100).toFixed(1)}% · after-tax profit this year</td><td class="n muted">${money(c.coTax)} · ${money(c.afterTaxProfit)}</td></tr>
-      <tr><td class="muted">Dividends declared (cash) · retained after tax</td><td class="n muted">${money(c.netDivs)} · ${money(c.retained)}</td></tr>
+      ${c.trust
+        ? `<tr><td class="muted">Distributions made · income not distributed</td><td class="n muted">${money(c.netDivs)} · ${money(c.retained)}</td></tr>`
+        : `<tr><td class="muted">Company tax at ${(c.r*100).toFixed(1)}% · after-tax profit this year</td><td class="n muted">${money(c.coTax)} · ${money(c.afterTaxProfit)}</td></tr>
+      <tr><td class="muted">Dividends declared (cash) · retained after tax</td><td class="n muted">${money(c.netDivs)} · ${money(c.retained)}</td></tr>`}
     </table>`;
 
-  let h = `<h2>PCG 2021/4 result</h2>`;
-  if (c.denom <= 0){ $('#resultsCard').innerHTML = h + '<div class="info">Enter the company profit and amounts paid to calculate the score.</div>'; renderSidebar(); return; }
-  if (c.priorYear > 1) h += `<div class="warn">Dividends of ${money(c.netDivs)} are ${money(c.priorYear)} more than this year's after-tax profit (${money(c.afterTaxProfit)}), so part is being paid from prior-year retained profits. This lifts Factor 1 for this year only; consider whether it reflects the ongoing arrangement.</div>`;
+  const undist = c.trust && c.retained > 1
+    ? `<div class="warn"><b>Distributions are ${money(c.retained)} less than the trust's net income.</b> A trust should distribute all of its income each year. Distributions entered total ${money(c.netDivs)} against net income of ${money(c.profit)}. Check the amounts; until they match, the balance is treated as taxed to the trustee at ${(c.R.top*100).toFixed(0)}%.</div>` : '';
+  $('#buildup').insertAdjacentHTML('beforeend', undist);
+
+  let h = `<h2>PCG 2021/4 result</h2>` + undist;
+  if (c.denom <= 0){ $('#resultsCard').innerHTML = h + `<div class="info">Enter the ${w.ent} profit and amounts paid to calculate the score.</div>`; renderSidebar(); return; }
+  if (c.priorYear > 1) h += c.trust
+    ? `<div class="warn">Distributions of ${money(c.netDivs)} are ${money(c.priorYear)} more than the trust's net income (${money(c.profit)}). A trust can't distribute more income than it has for the year, so check the figures.</div>`
+    : `<div class="warn">Dividends of ${money(c.netDivs)} are ${money(c.priorYear)} more than this year's after-tax profit (${money(c.afterTaxProfit)}), so part is being paid from prior-year retained profits. This lifts Factor 1 for this year only; consider whether it reflects the ongoing arrangement.</div>`;
 
   // Table 1: where the profit ends up
   const share = x => c.E ? pct(x / c.E * 100) : '–';
   h += `<h3>Where the profit ends up (Factor 1)</h3>
-    <table class="t"><thead><tr><th>Recipient</th><th class="n">Wages &amp; super</th><th class="n">Dividends (cash)</th><th class="n">Total</th><th class="n">% of profit</th></tr></thead><tbody>`;
+    <table class="t"><thead><tr><th>Recipient</th><th class="n">Wages &amp; super</th><th class="n">${c.trust ? 'Distributions' : 'Dividends (cash)'}</th><th class="n">Total</th><th class="n">% of profit</th></tr></thead><tbody>`;
   c.people.forEach(x => {
     const ws = x.ind ? x.d.wages + x.d.sup : 0;
     h += `<tr${x.isIpp?' class="ipp"':''}><td>${esc(x.name)}<br><span class="muted" style="font-size:12px">${esc(x.kind)}</span></td><td class="n">${x.ind?money(ws):'–'}</td><td class="n">${money(x.d.div)}</td><td class="n">${money(x.d.share)}</td><td class="n">${share(x.d.share)}</td></tr>`;
   });
-  h += `<tr><td>Company tax</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.coTax)}</td><td class="n">${share(c.coTax)}</td></tr>`;
-  h += `<tr><td>${c.retained >= 0 ? 'Retained in the company (after tax, not yet paid out)' : 'Paid out of prior-year retained profits'}</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.retained)}</td><td class="n">${share(c.retained)}</td></tr>`;
+  if (!c.trust) h += `<tr><td>Company tax</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.coTax)}</td><td class="n">${share(c.coTax)}</td></tr>`;
+  if (!c.trust || Math.abs(c.retained) > 1) h += `<tr><td>${c.trust ? (c.retained >= 0 ? 'Not distributed – check distributions (taxed to the trustee)' : 'Distributed in excess of net income')
+                         : (c.retained >= 0 ? 'Retained in the company (after tax, not yet paid out)' : 'Paid out of prior-year retained profits')}</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.retained)}</td><td class="n">${share(c.retained)}</td></tr>`;
   h += `</tbody><tfoot><tr><td colspan="3">Total profit entitlement</td><td class="n">${money(c.E)}</td><td class="n">100.00%</td></tr></tfoot></table>`;
 
   // Table 2: where the tax is paid
   h += `<h3>Where the tax is paid (Factor 2)</h3>
     <table class="t"><thead><tr><th>Taxpayer</th><th>Tax on</th><th class="n">Tax paid</th></tr></thead><tbody>
-    <tr><td>Company</td><td class="muted">${money(c.profit)} net profit × ${(c.r*100).toFixed(1)}%</td><td class="n">${money(c.coTax)}</td></tr>`;
+    ${c.trust
+      ? (c.trusteeTax > 0
+          ? `<tr><td>Trustee</td><td class="muted">${money(c.retained)} not distributed × ${(c.R.top*100).toFixed(1)}% (s99A)</td><td class="n">${money(c.trusteeTax)}</td></tr>`
+          : `<tr><td>Trust</td><td class="muted">No tax at trust level – income is taxed to the beneficiaries</td><td class="n">${money(0)}</td></tr>`)
+      : `<tr><td>Company</td><td class="muted">${money(c.profit)} net profit × ${(c.r*100).toFixed(1)}%</td><td class="n">${money(c.coTax)}</td></tr>`}`;
   c.people.forEach(x => {
     if (!x.d.share) return;
-    const on = x.ind ? [x.d.wages?`wages ${money(x.d.wages)}`:'', x.d.div?`dividends ${money(x.d.div)}`:'', x.d.sup&&(S.fin.opts.contribTax||x.d.d293)?`super ${money(x.d.sup)}`:''].filter(Boolean).join(' · ')
-                     : `dividend ${money(x.d.div)} × ${(x.d.rate*100).toFixed(1)}%`;
+    const on = x.ind ? [x.d.wages?`wages ${money(x.d.wages)}`:'', x.d.div?`${w.pays} ${money(x.d.div)}`:'', x.d.sup&&(S.fin.opts.contribTax||x.d.d293)?`super ${money(x.d.sup)}`:''].filter(Boolean).join(' · ')
+                     : `${w.pay} ${money(x.d.div)} × ${(x.d.rate*100).toFixed(1)}%`;
     h += `<tr><td>${esc(x.name)}</td><td class="muted">${on}</td><td class="n">${refundOr(x.d.tax)}</td></tr>`;
   });
   h += `</tbody><tfoot><tr><td colspan="2">Total tax on the profit entitlement · effective tax rate ${pct(c.f2)}</td><td class="n">${money(c.totalTax)}</td></tr></tfoot></table>`;
@@ -459,9 +497,10 @@ function renderResults(){
 
   const p = pathToGreen();
   if (p){
-    if (p.none) h += `<div class="info">There are no related-party dividends or retained profits to redirect. To move toward green, consider increasing the IPP's salary.</div>`;
-    else if (p.notReachable) h += `<div class="info">Paying all related-party dividends and this year's retained profits to the IPP still doesn't reach green. Review related-party wages and super, and Factor 3.</div>`;
-    else h += `<div class="info"><b>Path to green:</b> paying about <b>${money(p.shift)}</b> more in dividends (net cash) to the IPP, taken from related-party dividends and this year's retained profits, gives Factor 1 of ${pct(p.res.f1)}, an effective tax rate of ${pct(p.res.f2)} and a score of ${p.res.total} (green). Additional tax ≈ <b>${money(p.extraTax)}</b>.</div>`;
+    const src = c.trust ? 'related-party distributions and any undistributed income' : "related-party dividends and this year's retained profits";
+    if (p.none) h += `<div class="info">There are no ${c.trust ? 'related-party distributions or undistributed income' : 'related-party dividends or retained profits'} to redirect. To move toward green, consider increasing the IPP's salary.</div>`;
+    else if (p.notReachable) h += `<div class="info">Paying all ${src} to the IPP still doesn't reach green. Review related-party wages and super, and Factor 3.</div>`;
+    else h += `<div class="info"><b>Path to green:</b> paying about <b>${money(p.shift)}</b> more in ${w.pays} to the IPP, taken from ${src}, gives Factor 1 of ${pct(p.res.f1)}, an effective tax rate of ${pct(p.res.f2)} and a score of ${p.res.total} (green). ${p.extraTax >= 0 ? 'Additional tax' : 'Tax saving'} ≈ <b>${money(Math.abs(p.extraTax))}</b>.</div>`;
   }
   $('#resultsCard').innerHTML = h;
   renderSidebar();
@@ -503,9 +542,16 @@ function recommendations(){
   if (S.fin.parties.some(p=>TYPES[p.type]?.individual && (num(p.wages)>0 || num(p.super)>0))) out.push('Document the services performed, hours and market rate for each related individual receiving wages/super to support "reasonable remuneration for bona fide services".');
   if (!gw.pass) out.push('One or more PCG 2021/4 gateway indicators are present — the risk score cannot be relied on. Consider restructuring or a private ruling.');
   if (S.fin.parties.some(p=>p.type==='smsf')) out.push('Income is flowing to a super fund/SMSF — this is a listed high-risk feature. Review under the non-arm\'s-length income rules as well as PCG 2021/4.');
-  if (c.denom>0 && c.retained>1) out.push(`${money(c.retained)} of this year's after-tax profit is retained in the company. It counts against Factor 1 until paid to the IPP; record the expected timing of future dividends.`);
-  if (c.priorYear>1) out.push(`Dividends include about ${money(c.priorYear)} paid from prior-year retained profits. Note this in the file, as it lifts Factor 1 for this year only.`);
-  if (c.denom>0 && S.fin.parties.some(p=>!TYPES[p.type]?.individual && num(p.div)>0)) out.push('Dividends are paid to a company or trust shareholder. Check for Division 7A loans or unpaid present entitlements that effectively return funds to the IPP or associates.');
+  if (c.denom>0 && c.retained>1) out.push(c.trust
+    ? `Distributions are ${money(c.retained)} less than the trust's net income. A trust should distribute all of its income; correct the distribution amounts, as the balance is otherwise taxed to the trustee at the top rate (s99A) and counts against Factor 1.`
+    : `${money(c.retained)} of this year's after-tax profit is retained in the company. It counts against Factor 1 until paid to the IPP; record the expected timing of future dividends.`);
+  if (c.priorYear>1) out.push(c.trust
+    ? `Distributions exceed the trust's net income by about ${money(c.priorYear)}. Check the figures entered.`
+    : `Dividends include about ${money(c.priorYear)} paid from prior-year retained profits. Note this in the file, as it lifts Factor 1 for this year only.`);
+  if (c.denom>0 && S.fin.parties.some(p=>!TYPES[p.type]?.individual && num(p.div)>0)) out.push(c.trust
+    ? 'Distributions are made to a company or trust beneficiary. Check for unpaid present entitlements and Division 7A exposure where the funds are not actually paid across.'
+    : 'Dividends are paid to a company or trust shareholder. Check for Division 7A loans or unpaid present entitlements that effectively return funds to the IPP or associates.');
+  if (c.trust && c.denom>0 && S.fin.parties.some(p=>num(p.div)>0)) out.push('Trust distributions go to beneficiaries other than the IPP. Confirm each beneficiary actually receives and keeps the benefit of their distribution, and consider section 100A (reimbursement agreements).');
   if (c.zone==='amber' || c.zone==='red'){
     const p = pathToGreen();
     out.push(`PCG 2021/4 rating is ${c.zone.toUpperCase()}. Expect ATO analysis of the arrangement.` + (p && p.shift ? ` Redirecting ≈ ${money(p.shift)} to the IPP would reach green at an extra tax cost of ≈ ${money(p.extraTax)}.` : ''));
@@ -550,20 +596,20 @@ function fileNote(){
   L.push('3b. PCG 2021/4 GATEWAYS');
   if (pcgNeeded() === false) L.push('  Not required – the Part IVA structure check did not indicate Part IVA may apply.');
   else L.push(gw.pass?'  Both gateways passed – no indicators identified.':'  FAILED – indicators: '+[...gw.f1,...gw.f2].join('; ')); L.push('');
-  L.push('3c. PCG 2021/4 RISK ASSESSMENT (company, one IPP)');
+  L.push(`3c. PCG 2021/4 RISK ASSESSMENT (${W().ent}, one IPP)`);
   if (c.denom>0){
-    L.push(`  Company net profit before tax: ${money(c.profit)}`);
+    L.push(`  ${W().profit}: ${money(c.profit)}`);
     L.push(`  Add back salary & super to the IPP: ${money(c.ippWagesSuper)}`);
     L.push(`  Add back wages & super to related parties: ${money(c.relWagesSuper)}`);
     L.push(`  IPP's total profit entitlement: ${money(c.E)}`);
-    L.push(`  Dividends declared (cash): ${money(c.netDivs)} (franking credits not taken into account)`);
-    if (c.priorYear>1) L.push(`  Note: ${money(c.priorYear)} of dividends paid from prior-year retained profits.`);
+    L.push(c.trust ? `  Distributions made: ${money(c.netDivs)}` : `  Dividends declared (cash): ${money(c.netDivs)} (franking credits not taken into account)`);
+    if (c.priorYear>1) L.push(c.trust ? `  Note: distributions exceed the trust's net income by ${money(c.priorYear)}.` : `  Note: ${money(c.priorYear)} of dividends paid from prior-year retained profits.`);
     L.push('  Where the profit ends up:');
-    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name} (${x.kind}): ${money(x.d.share)} (${pct(x.d.share/c.E*100)})${x.d.div?` incl. cash dividends ${money(x.d.div)}`:''}`); });
-    L.push(`   - Company tax: ${money(c.coTax)} (${pct(c.coTax/c.E*100)})`);
-    L.push(`   - ${c.retained>=0?'Retained in company (after tax)':'Paid from prior-year retained profits'}: ${money(c.retained)} (${pct(c.retained/c.E*100)})`);
+    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name} (${x.kind}): ${money(x.d.share)} (${pct(x.d.share/c.E*100)})${x.d.div?` incl. ${c.trust?'distributions':'cash dividends'} ${money(x.d.div)}`:''}`); });
+    if (!c.trust) L.push(`   - Company tax: ${money(c.coTax)} (${pct(c.coTax/c.E*100)})`);
+    if (!c.trust || Math.abs(c.retained) > 1) L.push(`   - ${c.trust ? (c.retained>=0?'Not distributed – check distributions (taxed to trustee)':'Distributed in excess of net income') : (c.retained>=0?'Retained in company (after tax)':'Paid from prior-year retained profits')}: ${money(c.retained)} (${pct(c.retained/c.E*100)})`);
     L.push('  Where the tax is paid:');
-    L.push(`   - Company tax: ${money(c.coTax)}`);
+    L.push(c.trust ? `   - Trustee (s99A, on undistributed income): ${money(c.trusteeTax)}` : `   - Company tax: ${money(c.coTax)}`);
     c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name}: ${money(x.d.tax)}`); });
     L.push(`  Total tax: ${money(c.totalTax)}`);
     L.push(`  Factor 1 – returned to IPP: ${pct(c.f1)} → score ${c.s1}`);
@@ -638,14 +684,22 @@ document.getElementById('psi-tool').addEventListener('input', e=>{
 });
 document.getElementById('psi-tool').addEventListener('change', e=>{
   const t = e.target;
-  if (t.id==='structure'){ S.client.structure=t.value; refreshFlows(); }
+  if (t.id==='structure'){
+    S.client.structure=t.value;
+    if (t.value==='company' || t.value==='trust'){ S.fin.entity=t.value; $('[data-fin="entity"]').value=t.value; renderParties(); renderResults(); }
+    refreshFlows();
+  }
   else if (t.id==='fy'){ S.client.fy=t.value; renderResults(); }
-  else if (t.dataset.fin && t.tagName==='SELECT'){ S.fin[t.dataset.fin]=t.value; renderResults(); }
+  else if (t.dataset.fin && t.tagName==='SELECT'){
+    S.fin[t.dataset.fin]=t.value;
+    if (t.dataset.fin==='entity'){ S.client.structure=t.value; $('#structure').value=t.value; renderParties(); refreshFlows(); }
+    renderResults();
+  }
   else if (t.dataset.opt){ S.fin.opts[t.dataset.opt]=t.checked; renderResults(); }
   else if (t.dataset.gw){ S[t.dataset.gw][t.dataset.i]=t.checked; renderGwResult(); renderResults(); }
   else if (t.dataset.p==='type'){ const pid=t.closest('.party').dataset.pid; S.fin.parties.find(x=>String(x.id)===pid).type=t.value; renderParties(); renderResults(); }
   else if (t.id==='fileIn' && t.files[0]){
-    const r = new FileReader(); r.onload = ()=>{ try{ S = Object.assign(blankState(), JSON.parse(r.result)); uid = Math.max(1,...S.fin.parties.map(p=>p.id+1)); renderAll(); }catch(err){ alert('Could not read that file.'); } }; r.readAsText(t.files[0]); t.value='';
+    const r = new FileReader(); r.onload = ()=>{ try{ S = Object.assign(blankState(), JSON.parse(r.result)); S.fin.entity = S.fin.entity || 'company'; uid = Math.max(1,...S.fin.parties.map(p=>p.id+1)); renderAll(); }catch(err){ alert('Could not read that file.'); } }; r.readAsText(t.files[0]); t.value='';
   }
   renderSummary(); fileNote();
 });
