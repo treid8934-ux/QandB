@@ -225,16 +225,18 @@
                 <span class="fhint">A trust pays no tax itself; its income is taxed to the beneficiaries.</span>
               </label>
               <label class="f"><span><span data-w="profit">Company net profit before tax</span> ($)</span><input type="text" class="money" id="fin_total" data-fin="coProfit" inputmode="decimal" placeholder="0"><span class="fhint">After all business expenses, including wages and super paid to the IPP and related parties.</span></label>
-              <label class="f" id="coRateWrap">Company tax rate
+              <label class="f co-only" id="coRateWrap">Company tax rate
                 <select data-fin="coRate"><option value="coBase">Base rate entity</option><option value="coFull">Full rate</option></select>
               </label>
+              <label class="f co-only">Dividends franked (%)<input type="text" class="money" data-fin="franking" inputmode="decimal" placeholder="100"><span class="fhint">100 = fully franked (default). <span id="frankNote"></span></span></label>
+              <label class="f co-only">Opening retained earnings ($)<input type="text" class="money" data-fin="openingRE" inputmode="decimal" placeholder="0"><span class="fhint">Optional. Used to check dividends against available profits and show closing retained earnings.</span></label>
             </div>
 
             <h3>Principal (IPP)</h3>
             <div class="grid">
               <label class="f"><span>Salary / wages paid by the <span data-w="ent">company</span> ($)</span><input type="text" class="money" data-ipp="wages" inputmode="decimal" placeholder="0"></label>
               <label class="f"><span>Super paid by the <span data-w="ent">company</span> ($)</span><input type="text" class="money" data-ipp="super" inputmode="decimal" placeholder="0"></label>
-              <label class="f"><span data-w="payLabel">Dividend received – net cash ($)</span><input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint" data-w="payHint">The cash amount paid. Franking credits are not taken into account.</span></label>
+              <label class="f"><span data-w="payLabel">Dividend paid – excluding franking credits ($)</span><input type="text" class="money" data-ipp="div" inputmode="decimal" placeholder="0"><span class="fhint" data-w="payHint">The cash amount paid. Franking credits are not taken into account.</span></label>
               <label class="f"><span>Other taxable income, not from the <span data-w="ent">company</span> ($)</span><input type="text" class="money" data-ipp="other" inputmode="decimal" placeholder="0"><span class="fhint">Used only to work out their marginal rate.</span></label>
             </div>
             <div class="taxline" id="ippTax"></div>
@@ -244,7 +246,7 @@
             <div id="parties"></div>
             <button class="btn add" id="addParty"><span class="plus">+</span> Add related party<span class="addsub">Spouse, family member, bucket company or anyone else paid by the entity</span></button>
 
-            <h3>Profit entitlement</h3>
+            <h3>Total income from the entity (profit entitlement)</h3>
             <div id="buildup"></div>
 
             <h3>Options</h3>

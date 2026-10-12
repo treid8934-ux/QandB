@@ -45,7 +45,7 @@ function blankState(){
     client:{name:'', ipp:'', structure:'company', fy:DEFAULT_FY},
     answers:{psi:{}, psb:{}, iva:{}},
     gw1:{}, gw2:{},
-    fin:{ entity:'company', coProfit:0, coRate:'coBase', benchmark:0,
+    fin:{ entity:'company', coProfit:0, coRate:'coBase', franking:100, openingRE:0, benchmark:0,
       ipp:{wages:0, super:0, div:0, other:0},
       parties:[],
       opts:{superInF1:true, contribTax:true, div293:true, useF3:false} }
@@ -57,7 +57,7 @@ let S = blankState();
 const WORDS = {
   company:{ent:'company', Ent:'Company', pay:'dividend', Pay:'Dividend', pays:'dividends', Pays:'Dividends',
     profit:'Company net profit before tax', holders:'shareholders',
-    payLabel:'Dividend received – net cash ($)', payHint:'The cash amount paid. Franking credits are not taken into account.',
+    payLabel:'Dividend paid – excluding franking credits ($)', payHint:'Enter the cash dividend. Franking credits are added automatically using the franking % and company tax rate above.',
     partyHint:'Add anyone else paid wages or super by the company, or paid a dividend. If a family trust holds shares, add the beneficiaries who receive the dividend as related parties instead.'},
   trust:{ent:'trust', Ent:'Trust', pay:'distribution', Pay:'Distribution', pays:'distributions', Pays:'Distributions',
     profit:'Trust net income before distributions', holders:'beneficiaries',
@@ -262,27 +262,40 @@ function rateFor(type, R, custom){
   if (type==='custom') return num(custom)/100; return 0;
 }
 
-/* Tax on an individual's income FROM THE COMPANY (wages, super, dividends).
-   Dividends are taxed at their cash amount: no gross-up and no franking credits.
-   Income tax is the extra tax caused by the company income on top of their other income.
-   Medicare levy and offsets excluded. */
-function personTax(p, R, o){
-  const wages = num(p.wages), sup = num(p.super), other = num(p.other), div = num(p.div);
-  const assess = wages + div;
-  const income = indTax(other + assess, R) - indTax(other, R);
+/* ATO METHOD (PCG 2021/4 workpaper + ATO response on franked dividends):
+   - Dividends count at their grossed-up amount (cash + franking credits) in both factors.
+   - Tax is worked out BEFORE the franking offset: the franking credit stands for company tax
+     already paid, so a shareholder is treated like a partner receiving the profit directly.
+   - Each person's tax on firm income is the LARGER of
+       (a) tax on the firm amounts as if they had no other income, and
+       (b) top-slice: tax with the firm amounts less tax without them.
+   - Medicare levy and other levies excluded. Super contributions tax included. */
+function grossUp(div, fr){
+  const d = num(div);
+  const fc = fr.rate > 0 && fr.rate < 1 ? d * fr.rate / (1 - fr.rate) * fr.pct : 0;
+  return {d, fc, gross: d + fc};
+}
+function personTax(p, R, o, fr){
+  const wages = num(p.wages), sup = num(p.super), other = num(p.other);
+  const dv = grossUp(p.div, fr);
+  const assess = wages + dv.gross;
+  const standalone = indTax(assess, R);
+  const topSlice = indTax(other + assess, R) - indTax(other, R);
+  const income = Math.max(standalone, topSlice);
   const contrib = o.contribTax ? sup * R.superTax : 0;
   let d293 = 0;
   if (o.div293 && sup > 0){
     const excess = Math.max(0, other + assess + sup - R.div293Threshold);
     d293 = .15 * Math.min(sup, excess);
   }
-  return {wages, sup, div, income, contrib, d293, tax: income + contrib + d293, share: wages + sup + div};
+  return {wages, sup, div:dv.d, fc:dv.fc, gross:dv.gross, income, standalone, topSlice, contrib, d293,
+          tax: income + contrib + d293, share: wages + sup + dv.gross};
 }
 
-/* Tax on a dividend received by a company, trust or super fund shareholder (cash amount × its rate) */
-function entityTax(p, R){
-  const div = num(p.div), rate = rateFor(p.type, R, p.rate);
-  return {div, rate, tax: div * rate, share: div};
+/* Company, trust or super fund shareholder/beneficiary: grossed-up amount × its rate, no franking offset */
+function entityTax(p, R, fr){
+  const dv = grossUp(p.div, fr), rate = rateFor(p.type, R, p.rate);
+  return {div:dv.d, fc:dv.fc, gross:dv.gross, rate, tax: dv.gross * rate, share: dv.gross};
 }
 
 function f1Score(p){ if(p>90)return 1; if(p>75)return 2; if(p>60)return 3; if(p>=50)return 4; if(p>25)return 5; return 6; }
@@ -294,46 +307,49 @@ function zoneFor(total, n){
 }
 const r4 = x => Math.round(x*10000)/10000;
 
-/* PCG 2021/4 for a company or trust with one IPP.
-   TRUST: no tax at entity level. Income distributed is taxed to each beneficiary;
-          anything not distributed is taxed to the trustee at the top rate (s99A).
-   COMPANY:
-   Profit entitlement (E) = company net profit before tax
-                          + wages & super paid to the IPP and related parties (added back).
-   Where the profit ends up (Factor 1), in cash terms as per the accounts:
-       wages + super + cash dividends for each person, company tax,
-       and the after-tax profit retained in the company.
-   Where the tax is paid (Factor 2): company tax + each person's tax on what they received.
-   Franking credits are not used anywhere: dividends are always taken at their cash amount. */
+/* PCG 2021/4 for a company or trust with one IPP (ATO method – see notes above personTax).
+   Total income from the firm (denominator, both factors)
+       = each person's assessable income from the firm (wages, super, grossed-up dividends / distributions)
+       + profit retained in the entity THIS year (before tax).
+   Dividends paid out of prior-year retained profits are included in full (ATO view).
+   Tax (Factor 2) = each person's tax before franking offsets
+       + company tax on this year's retained profit only (tax on profit paid out is already
+         reflected in the franking credits)   |   trust: trustee tax on any undistributed income. */
 function compute(fin, fy){
   const R = RATES[fy] || RATES[DEFAULT_FY]; const o = fin.opts;
   const trust = fin.entity === 'trust';
   const r = trust ? 0 : (fin.coRate === 'coFull' ? R.coFull : R.coBase);
+  const fpct = fin.franking === undefined ? 100 : Math.min(100, Math.max(0, num(fin.franking)));
+  const fr = {rate:r, pct: fpct / 100};
   const profit = num(fin.coProfit);
-  const coTax = Math.max(0, profit) * r;
+  const coTaxPaid = Math.max(0, profit) * r;               // company's actual tax for the year (information)
 
-  const ipp = personTax(fin.ipp, R, o);
+  const ipp = personTax(fin.ipp, R, o, fr);
   const people = [{name: S.client.ipp || 'Principal (IPP)', kind:'IPP', isIpp:true, ind:true, d:ipp}];
   fin.parties.forEach(p => {
     const ind = !!TYPES[p.type]?.individual;
     people.push({id:p.id, name: p.name || (ind ? 'Related individual' : 'Related entity'), kind: TYPES[p.type].label, ind,
-                 d: ind ? personTax(p, R, o) : entityTax(p, R)});
+                 d: ind ? personTax(p, R, o, fr) : entityTax(p, R, fr)});
   });
 
-  const ippWagesSuper = ipp.wages + ipp.sup;
-  const relWagesSuper = people.filter(x => x.ind && !x.isIpp).reduce((a, x) => a + x.d.wages + x.d.sup, 0);
-  const E = profit + ippWagesSuper + relWagesSuper;
   const netDivs = people.reduce((a, x) => a + x.d.div, 0);
-  const afterTaxProfit = Math.max(0, profit) - coTax;
-  const retained = afterTaxProfit - netDivs;             // company: after tax, negative = paid from prior-year profits
-                                                         // trust: income not distributed (before trustee tax)
-  const trusteeTax = trust ? Math.max(0, retained) * R.top : 0;
+  const frankingCredits = people.reduce((a, x) => a + x.d.fc, 0);
+  const received = people.reduce((a, x) => a + x.d.share, 0);
+  const afterTaxProfit = Math.max(0, profit) - coTaxPaid;
+  const retained = afterTaxProfit - netDivs;               // company: this year's after-tax profit kept (negative = prior-year profits paid out)
+                                                           // trust: income not distributed
+  const retainedPre = trust ? Math.max(0, retained) : (r < 1 ? Math.max(0, retained) / (1 - r) : 0);  // before tax
+  const coTax = trust ? 0 : retainedPre * r;                // company tax counted: on retained profit only
+  const trusteeTax = trust ? retainedPre * R.top : 0;
   const priorYear = Math.max(0, -retained);
+  const hasOpening = !trust && num(fin.openingRE) !== 0;
+  const closingRE = num(fin.openingRE) + afterTaxProfit - netDivs;
   const personalTax = people.reduce((a, x) => a + x.d.tax, 0);
   const totalTax = coTax + trusteeTax + personalTax;
 
+  const E = received + retainedPre;
   const denom = E;
-  const ippReturned = ipp.wages + ipp.div + (o.superInF1 ? ipp.sup : 0);
+  const ippReturned = ipp.wages + ipp.gross + (o.superInF1 ? ipp.sup : 0);
   const f1 = denom > 0 ? r4(ippReturned / denom * 100) : 0;
   const f2 = denom > 0 ? r4(totalTax / denom * 100) : 0;
   const bench = num(fin.benchmark);
@@ -343,8 +359,9 @@ function compute(fin, fy){
   const n = useF3 ? 3 : 2; const total = s1 + s2 + (s3 || 0);
   const auto = f1 >= 100;
   const zone = denom <= 0 ? null : (auto ? 'green' : zoneFor(total, n));
-  return {R, r, trust, trusteeTax, profit, coTax, people, ipp, ippWagesSuper, relWagesSuper, E, netDivs, retained,
-          afterTaxProfit, priorYear, personalTax, totalTax, denom, ippReturned, f1, f2, f3, s1, s2, s3, n, total, auto, zone};
+  return {R, r, fr, trust, trusteeTax, profit, coTaxPaid, coTax, people, ipp, E, netDivs, frankingCredits, received,
+          retained, retainedPre, afterTaxProfit, priorYear, hasOpening, closingRE, personalTax, totalTax,
+          denom, ippReturned, f1, f2, f3, s1, s2, s3, n, total, auto, zone};
 }
 
 /* Path to green: pay more of the profit to the IPP as dividends — taken from related-party
@@ -353,7 +370,7 @@ function pathToGreen(){
   const base = compute(S.fin, S.client.fy);
   if (!base.zone || base.zone === 'green') return null;
   const partyNet = S.fin.parties.reduce((a, p) => a + num(p.div), 0);
-  const retainedNet = Math.max(0, base.retained);   // after-tax profit still in the company, available as dividends
+  const retainedNet = Math.max(0, base.retained);   // this year's after-tax profit still in the entity, available to pay out
   const movable = partyNet + retainedNet;
   if (movable <= 0) return {none:true};
   const step = Math.max(50, movable / 400);
@@ -400,19 +417,20 @@ function renderParties(){
 }
 const refundOr = n => n < 0 ? `${money(-n)} refund` : money(n);
 function taxBreak(d){
-  if (d.income === undefined){   // entity shareholder
-    if (!d.div) return `No ${W().pay} entered.`;
-    return `${W().Pay} ${money(d.div)} × ${(d.rate*100).toFixed(1)}% → tax <strong>${money(d.tax)}</strong>`;
+  const w = W();
+  if (d.income === undefined){   // entity shareholder / beneficiary
+    if (!d.div) return `No ${w.pay} entered.`;
+    return `${w.Pay} ${money(d.div)}${d.fc?` + franking credits ${money(d.fc)} = ${money(d.gross)}`:''} × ${(d.rate*100).toFixed(1)}% → tax <strong>${money(d.tax)}</strong>`;
   }
   const parts = [];
   if (d.wages) parts.push(`wages ${money(d.wages)}`);
-  if (d.div) parts.push(`${W().pay} ${money(d.div)}`);
-  if (!parts.length && !d.sup) return `Nothing entered from the ${W().ent}.`;
+  if (d.div) parts.push(`${w.pay} ${money(d.div)}${d.fc?` + franking credits ${money(d.fc)}`:''}`);
+  if (!parts.length && !d.sup) return `Nothing entered from the ${w.ent}.`;
   let s = '';
-  if (parts.length) s += `${parts.join(' + ')} → income tax <strong>${money(d.income)}</strong>`;
+  if (parts.length) s += `${parts.join(' + ')} → income tax <strong>${money(d.income)}</strong>${d.fc?' (before franking offset)':''}${d.topSlice > d.standalone + 1 ? ' <span class="muted">· top-slice method</span>' : ''}`;
   if (d.sup) s += `${s?' · ':''}super ${money(d.sup)} → contributions tax <strong>${money(d.contrib)}</strong>`;
   if (d.d293) s += ` · Div 293 <strong>${money(d.d293)}</strong>`;
-  s += ` · <b>Total ${refundOr(d.tax)}</b>`;
+  s += ` · <b>Total ${money(d.tax)}</b>`;
   return s;
 }
 function renderResults(){
@@ -427,20 +445,30 @@ function renderResults(){
   // labels that follow the entity type
   $$('[data-w]').forEach(el => { el.textContent = w[el.dataset.w]; });
   $('#coRateWrap').style.display = c.trust ? 'none' : '';
+  { const sel = $('[data-fin="coRate"]');
+    sel.options[0].text = `Base rate entity (${(c.R.coBase*100).toFixed(1).replace('.0','')}%)`;
+    sel.options[1].text = `Full rate (${(c.R.coFull*100).toFixed(1).replace('.0','')}%)`;
+    $('#frankNote').textContent = c.fr.pct > 0 && c.r > 0
+      ? `Each $1,000 of dividend carries ${money(1000 * c.r / (1 - c.r) * c.fr.pct)} of franking credits (grossed up to ${money(1000 + 1000 * c.r / (1 - c.r) * c.fr.pct)}).`
+      : 'Unfranked: no franking credits added.'; }
   const st = S.client.structure;
   $('#coNote').innerHTML = (st === 'company' || st === 'trust') ? '' :
     `<div class="warn">3C works for a company or a trust. The structure in Step 1 is set to ${esc({sole:'sole trader',partnership:'partnership'}[st])}, so treat these results with care.</div>`;
 
-  // Profit entitlement build-up (shown under the inputs)
+  $$('.co-only').forEach(el => { el.style.display = c.trust ? 'none' : ''; });
+
+  // Total income build-up (shown under the inputs)
+  const ippIn = c.ipp.share, relIn = c.received - c.ipp.share;
   $('#buildup').innerHTML = `<table class="t">
-      <tr><td>${w.profit}</td><td class="n">${money(c.profit)}</td></tr>
-      <tr><td>+ Salary &amp; super paid to the IPP</td><td class="n">${money(c.ippWagesSuper)}</td></tr>
-      <tr><td>+ Wages &amp; super paid to related parties</td><td class="n">${money(c.relWagesSuper)}</td></tr>
-      <tr class="sum"><td>= IPP's total profit entitlement</td><td class="n">${money(c.E)}</td></tr>
+      <tr><td>IPP: wages, super &amp; ${c.trust ? 'distributions' : 'grossed-up dividends'}</td><td class="n">${money(ippIn)}</td></tr>
+      <tr><td>+ Related parties: wages, super &amp; ${c.trust ? 'distributions' : 'grossed-up dividends'}</td><td class="n">${money(relIn)}</td></tr>
+      <tr><td>+ ${c.trust ? 'Income not distributed' : 'Profit retained in the company this year (before tax)'}</td><td class="n">${money(c.retainedPre)}</td></tr>
+      <tr class="sum"><td>= Total income from the ${w.ent} (IPP's profit entitlement)</td><td class="n">${money(c.E)}</td></tr>
       ${c.trust
-        ? `<tr><td class="muted">Distributions made · income not distributed</td><td class="n muted">${money(c.netDivs)} · ${money(c.retained)}</td></tr>`
-        : `<tr><td class="muted">Company tax at ${(c.r*100).toFixed(1)}% · after-tax profit this year</td><td class="n muted">${money(c.coTax)} · ${money(c.afterTaxProfit)}</td></tr>
-      <tr><td class="muted">Dividends declared (cash) · retained after tax</td><td class="n muted">${money(c.netDivs)} · ${money(c.retained)}</td></tr>`}
+        ? `<tr><td class="muted">Trust net income · distributions made</td><td class="n muted">${money(c.profit)} · ${money(c.netDivs)}</td></tr>`
+        : `<tr><td class="muted">Company tax for the year at ${(c.r*100).toFixed(1)}% · after-tax profit</td><td class="n muted">${money(c.coTaxPaid)} · ${money(c.afterTaxProfit)}</td></tr>
+      <tr><td class="muted">Dividends declared (cash) · franking credits attached</td><td class="n muted">${money(c.netDivs)} · ${money(c.frankingCredits)}</td></tr>
+      ${c.hasOpening ? `<tr><td class="muted">Retained earnings: opening + after-tax profit − dividends = closing</td><td class="n muted">${money(num(S.fin.openingRE))} → ${money(c.closingRE)}</td></tr>` : ''}`}
     </table>`;
 
   const undist = c.trust && c.retained > 1
@@ -451,20 +479,19 @@ function renderResults(){
   if (c.denom <= 0){ $('#resultsCard').innerHTML = h + `<div class="info">Enter the ${w.ent} profit and amounts paid to calculate the score.</div>`; renderSidebar(); return; }
   if (c.priorYear > 1) h += c.trust
     ? `<div class="warn">Distributions of ${money(c.netDivs)} are ${money(c.priorYear)} more than the trust's net income (${money(c.profit)}). A trust can't distribute more income than it has for the year, so check the figures.</div>`
-    : `<div class="warn">Dividends of ${money(c.netDivs)} are ${money(c.priorYear)} more than this year's after-tax profit (${money(c.afterTaxProfit)}), so part is being paid from prior-year retained profits. This lifts Factor 1 for this year only; consider whether it reflects the ongoing arrangement.</div>`;
+    : `<div class="info">Dividends of ${money(c.netDivs)} are ${money(c.priorYear)} more than this year's after-tax profit (${money(c.afterTaxProfit)}), so part is paid from prior-year retained profits. Per ATO guidance these dividends are still included in full in both factors.</div>`;
+  if (c.hasOpening && c.closingRE < -1) h += `<div class="warn">Dividends exceed opening retained earnings plus this year's after-tax profit by ${money(-c.closingRE)}. Check the figures – a company can only pay dividends out of available profits.</div>`;
 
-  // Table 1: where the profit ends up
+  // Table 1: where the income goes
   const share = x => c.E ? pct(x / c.E * 100) : '–';
-  h += `<h3>Where the profit ends up (Factor 1)</h3>
-    <table class="t"><thead><tr><th>Recipient</th><th class="n">Wages &amp; super</th><th class="n">${c.trust ? 'Distributions' : 'Dividends (cash)'}</th><th class="n">Total</th><th class="n">% of profit</th></tr></thead><tbody>`;
+  h += `<h3>Where the income goes (Factor 1)</h3>
+    <table class="t"><thead><tr><th>Recipient</th><th class="n">Wages &amp; super</th><th class="n">${c.trust ? 'Distributions' : 'Dividends (grossed-up)'}</th><th class="n">Total</th><th class="n">% of total</th></tr></thead><tbody>`;
   c.people.forEach(x => {
     const ws = x.ind ? x.d.wages + x.d.sup : 0;
-    h += `<tr${x.isIpp?' class="ipp"':''}><td>${esc(x.name)}<br><span class="muted" style="font-size:12px">${esc(x.kind)}</span></td><td class="n">${x.ind?money(ws):'–'}</td><td class="n">${money(x.d.div)}</td><td class="n">${money(x.d.share)}</td><td class="n">${share(x.d.share)}</td></tr>`;
+    h += `<tr${x.isIpp?' class="ipp"':''}><td>${esc(x.name)}<br><span class="muted" style="font-size:12px">${esc(x.kind)}</span></td><td class="n">${x.ind?money(ws):'–'}</td><td class="n">${money(x.d.gross)}${x.d.fc?`<br><span class="muted" style="font-size:12px">${money(x.d.div)} cash + ${money(x.d.fc)} franking</span>`:''}</td><td class="n">${money(x.d.share)}</td><td class="n">${share(x.d.share)}</td></tr>`;
   });
-  if (!c.trust) h += `<tr><td>Company tax</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.coTax)}</td><td class="n">${share(c.coTax)}</td></tr>`;
-  if (!c.trust || Math.abs(c.retained) > 1) h += `<tr><td>${c.trust ? (c.retained >= 0 ? 'Not distributed – check distributions (taxed to the trustee)' : 'Distributed in excess of net income')
-                         : (c.retained >= 0 ? 'Retained in the company (after tax, not yet paid out)' : 'Paid out of prior-year retained profits')}</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.retained)}</td><td class="n">${share(c.retained)}</td></tr>`;
-  h += `</tbody><tfoot><tr><td colspan="3">Total profit entitlement</td><td class="n">${money(c.E)}</td><td class="n">100.00%</td></tr></tfoot></table>`;
+  if (c.retainedPre > 1) h += `<tr><td>${c.trust ? 'Not distributed – check distributions (taxed to the trustee)' : 'Retained in the company this year (before tax)'}</td><td class="n">–</td><td class="n">–</td><td class="n">${money(c.retainedPre)}</td><td class="n">${share(c.retainedPre)}</td></tr>`;
+  h += `</tbody><tfoot><tr><td colspan="3">Total income from the ${w.ent}</td><td class="n">${money(c.E)}</td><td class="n">100.00%</td></tr></tfoot></table>`;
 
   // Table 2: where the tax is paid
   h += `<h3>Where the tax is paid (Factor 2)</h3>
@@ -473,17 +500,20 @@ function renderResults(){
       ? (c.trusteeTax > 0
           ? `<tr><td>Trustee</td><td class="muted">${money(c.retained)} not distributed × ${(c.R.top*100).toFixed(1)}% (s99A)</td><td class="n">${money(c.trusteeTax)}</td></tr>`
           : `<tr><td>Trust</td><td class="muted">No tax at trust level – income is taxed to the beneficiaries</td><td class="n">${money(0)}</td></tr>`)
-      : `<tr><td>Company</td><td class="muted">${money(c.profit)} net profit × ${(c.r*100).toFixed(1)}%</td><td class="n">${money(c.coTax)}</td></tr>`}`;
+      : (c.coTax > 0
+          ? `<tr><td>Company</td><td class="muted">${money(c.retainedPre)} profit retained this year × ${(c.r*100).toFixed(1)}%</td><td class="n">${money(c.coTax)}</td></tr>`
+          : `<tr><td>Company</td><td class="muted">None counted – profit paid out as dividends; the company tax is counted through the franking credits</td><td class="n">${money(0)}</td></tr>`)}`;
   c.people.forEach(x => {
     if (!x.d.share) return;
-    const on = x.ind ? [x.d.wages?`wages ${money(x.d.wages)}`:'', x.d.div?`${w.pays} ${money(x.d.div)}`:'', x.d.sup&&(S.fin.opts.contribTax||x.d.d293)?`super ${money(x.d.sup)}`:''].filter(Boolean).join(' · ')
-                     : `${w.pay} ${money(x.d.div)} × ${(x.d.rate*100).toFixed(1)}%`;
-    h += `<tr><td>${esc(x.name)}</td><td class="muted">${on}</td><td class="n">${refundOr(x.d.tax)}</td></tr>`;
+    const on = x.ind ? [x.d.wages?`wages ${money(x.d.wages)}`:'', x.d.div?`${w.pays} ${money(x.d.gross)}${x.d.fc?' grossed-up':''}`:'', x.d.sup&&(S.fin.opts.contribTax||x.d.d293)?`super ${money(x.d.sup)}`:''].filter(Boolean).join(' · ') + (x.d.fc?' · before franking offset':'')
+                     : `${w.pay} ${money(x.d.gross)}${x.d.fc?' grossed-up':''} × ${(x.d.rate*100).toFixed(1)}%`;
+    h += `<tr><td>${esc(x.name)}</td><td class="muted">${on}</td><td class="n">${money(x.d.tax)}</td></tr>`;
   });
-  h += `</tbody><tfoot><tr><td colspan="2">Total tax on the profit entitlement · effective tax rate ${pct(c.f2)}</td><td class="n">${money(c.totalTax)}</td></tr></tfoot></table>`;
+  h += `</tbody><tfoot><tr><td colspan="2">Total tax · effective tax rate ${pct(c.f2)}</td><td class="n">${money(c.totalTax)}</td></tr></tfoot></table>
+    <p class="muted" style="font-size:12px;margin:6px 0 0">ATO method: tax before franking offsets; company tax counted only on profit retained; each person's tax is the larger of tax on the firm income alone or the top-slice amount; Medicare levy excluded.</p>`;
 
   h += `<h3>Scoring</h3><table class="t score-row"><thead><tr><th>Factor</th><th class="n">Result</th><th class="n">Score</th></tr></thead><tbody>
-    <tr><td>1 · Profit entitlement returned to the IPP<br><span class="muted" style="font-size:12px">${money(c.ippReturned)} ÷ ${money(c.denom)}${S.fin.opts.superInF1?'':' (super excluded)'}</span></td><td class="n">${pct(c.f1)}</td><td class="n"><b>${c.s1}</b></td></tr>
+    <tr><td>1 · Share of total income returned to the IPP<br><span class="muted" style="font-size:12px">${money(c.ippReturned)} ÷ ${money(c.denom)}${S.fin.opts.superInF1?'':' (super excluded)'}</span></td><td class="n">${pct(c.f1)}</td><td class="n"><b>${c.s1}</b></td></tr>
     <tr><td>2 · Total effective tax rate<br><span class="muted" style="font-size:12px">${money(c.totalTax)} ÷ ${money(c.denom)}</span></td><td class="n">${pct(c.f2)}</td><td class="n"><b>${c.s2}</b></td></tr>
     <tr><td>3 · Remuneration vs commercial benchmark${c.f3!==null?`<br><span class="muted" style="font-size:12px">${money(c.ippReturned)} ÷ ${money(num(S.fin.benchmark))}</span>`:''}</td><td class="n">${c.f3!==null?pct(c.f3):'Not assessed'}</td><td class="n"><b>${c.s3??'–'}</b></td></tr>
   </tbody><tfoot><tr><td>Aggregate (${c.n} factors · green ≤ ${c.n===2?7:10}, amber ${c.n===2?'8':'11–12'}, red ≥ ${c.n===2?9:13})</td><td></td><td class="n">${c.total}</td></tr></tfoot></table>`;
@@ -500,7 +530,7 @@ function renderResults(){
     const src = c.trust ? 'related-party distributions and any undistributed income' : "related-party dividends and this year's retained profits";
     if (p.none) h += `<div class="info">There are no ${c.trust ? 'related-party distributions or undistributed income' : 'related-party dividends or retained profits'} to redirect. To move toward green, consider increasing the IPP's salary.</div>`;
     else if (p.notReachable) h += `<div class="info">Paying all ${src} to the IPP still doesn't reach green. Review related-party wages and super, and Factor 3.</div>`;
-    else h += `<div class="info"><b>Path to green:</b> paying about <b>${money(p.shift)}</b> more in ${w.pays} to the IPP, taken from ${src}, gives Factor 1 of ${pct(p.res.f1)}, an effective tax rate of ${pct(p.res.f2)} and a score of ${p.res.total} (green). ${p.extraTax >= 0 ? 'Additional tax' : 'Tax saving'} ≈ <b>${money(Math.abs(p.extraTax))}</b>.</div>`;
+    else h += `<div class="info"><b>Path to green:</b> paying about <b>${money(p.shift)}</b> more in ${c.trust ? w.pays : 'cash dividends'} to the IPP, taken from ${src}, gives Factor 1 of ${pct(p.res.f1)}, an effective tax rate of ${pct(p.res.f2)} and a score of ${p.res.total} (green). ${p.extraTax >= 0 ? 'Additional tax' : 'Tax saving'} ≈ <b>${money(Math.abs(p.extraTax))}</b>.</div>`;
   }
   $('#resultsCard').innerHTML = h;
   renderSidebar();
@@ -544,10 +574,10 @@ function recommendations(){
   if (S.fin.parties.some(p=>p.type==='smsf')) out.push('Income is flowing to a super fund/SMSF — this is a listed high-risk feature. Review under the non-arm\'s-length income rules as well as PCG 2021/4.');
   if (c.denom>0 && c.retained>1) out.push(c.trust
     ? `Distributions are ${money(c.retained)} less than the trust's net income. A trust should distribute all of its income; correct the distribution amounts, as the balance is otherwise taxed to the trustee at the top rate (s99A) and counts against Factor 1.`
-    : `${money(c.retained)} of this year's after-tax profit is retained in the company. It counts against Factor 1 until paid to the IPP; record the expected timing of future dividends.`);
+    : `${money(c.retained)} of this year's after-tax profit is retained in the company. Its before-tax amount counts in the total income for Factor 1 (not as returned to the IPP) and the company tax on it counts in Factor 2. Record the expected timing of future dividends.`);
   if (c.priorYear>1) out.push(c.trust
     ? `Distributions exceed the trust's net income by about ${money(c.priorYear)}. Check the figures entered.`
-    : `Dividends include about ${money(c.priorYear)} paid from prior-year retained profits. Note this in the file, as it lifts Factor 1 for this year only.`);
+    : `Dividends include about ${money(c.priorYear)} paid from prior-year retained profits. Per ATO guidance they are included in full; note in the file that this year's result is lifted by the prior-year profits.`);
   if (c.denom>0 && S.fin.parties.some(p=>!TYPES[p.type]?.individual && num(p.div)>0)) out.push(c.trust
     ? 'Distributions are made to a company or trust beneficiary. Check for unpaid present entitlements and Division 7A exposure where the funds are not actually paid across.'
     : 'Dividends are paid to a company or trust shareholder. Check for Division 7A loans or unpaid present entitlements that effectively return funds to the IPP or associates.');
@@ -599,17 +629,20 @@ function fileNote(){
   L.push(`3c. PCG 2021/4 RISK ASSESSMENT (${W().ent}, one IPP)`);
   if (c.denom>0){
     L.push(`  ${W().profit}: ${money(c.profit)}`);
-    L.push(`  Add back salary & super to the IPP: ${money(c.ippWagesSuper)}`);
-    L.push(`  Add back wages & super to related parties: ${money(c.relWagesSuper)}`);
-    L.push(`  IPP's total profit entitlement: ${money(c.E)}`);
-    L.push(c.trust ? `  Distributions made: ${money(c.netDivs)}` : `  Dividends declared (cash): ${money(c.netDivs)} (franking credits not taken into account)`);
-    if (c.priorYear>1) L.push(c.trust ? `  Note: distributions exceed the trust's net income by ${money(c.priorYear)}.` : `  Note: ${money(c.priorYear)} of dividends paid from prior-year retained profits.`);
-    L.push('  Where the profit ends up:');
-    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name} (${x.kind}): ${money(x.d.share)} (${pct(x.d.share/c.E*100)})${x.d.div?` incl. ${c.trust?'distributions':'cash dividends'} ${money(x.d.div)}`:''}`); });
-    if (!c.trust) L.push(`   - Company tax: ${money(c.coTax)} (${pct(c.coTax/c.E*100)})`);
-    if (!c.trust || Math.abs(c.retained) > 1) L.push(`   - ${c.trust ? (c.retained>=0?'Not distributed – check distributions (taxed to trustee)':'Distributed in excess of net income') : (c.retained>=0?'Retained in company (after tax)':'Paid from prior-year retained profits')}: ${money(c.retained)} (${pct(c.retained/c.E*100)})`);
-    L.push('  Where the tax is paid:');
-    L.push(c.trust ? `   - Trustee (s99A, on undistributed income): ${money(c.trusteeTax)}` : `   - Company tax: ${money(c.coTax)}`);
+    if (c.trust) L.push(`  Distributions made: ${money(c.netDivs)}`);
+    else {
+      L.push(`  Company tax for the year: ${money(c.coTaxPaid)} · after-tax profit: ${money(c.afterTaxProfit)}`);
+      L.push(`  Dividends declared (cash): ${money(c.netDivs)}, franked ${Math.round(c.fr.pct*100)}% at ${(c.r*100).toFixed(1)}% · franking credits ${money(c.frankingCredits)}`);
+      if (c.hasOpening) L.push(`  Retained earnings: opening ${money(num(S.fin.openingRE))} → closing ${money(c.closingRE)}`);
+      if (c.priorYear>1) L.push(`  Note: ${money(c.priorYear)} of dividends paid from prior-year retained profits (included in full, per ATO guidance).`);
+    }
+    L.push('  Total income from the firm (IPP\'s profit entitlement):');
+    c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name} (${x.kind}): ${money(x.d.share)} (${pct(x.d.share/c.E*100)})${x.d.div?` incl. ${c.trust?'distributions':'grossed-up dividends'} ${money(x.d.gross)}`:''}`); });
+    if (c.retainedPre>1) L.push(`   - ${c.trust?'Not distributed (taxed to trustee)':'Retained in company this year (before tax)'}: ${money(c.retainedPre)} (${pct(c.retainedPre/c.E*100)})`);
+    L.push(`   Total: ${money(c.E)}`);
+    L.push('  Tax paid (before franking offsets, Medicare levy excluded):');
+    if (c.trust) { if (c.trusteeTax>0) L.push(`   - Trustee (s99A, on undistributed income): ${money(c.trusteeTax)}`); }
+    else L.push(`   - Company tax on profit retained this year: ${money(c.coTax)}`);
     c.people.forEach(x=>{ if (x.d.share) L.push(`   - ${x.name}: ${money(x.d.tax)}`); });
     L.push(`  Total tax: ${money(c.totalTax)}`);
     L.push(`  Factor 1 – returned to IPP: ${pct(c.f1)} → score ${c.s1}`);
@@ -621,7 +654,7 @@ function fileNote(){
   } else L.push('  Not completed.');
   L.push('');
   L.push('RECOMMENDATIONS'); recommendations().forEach((r,i)=>L.push(`  ${i+1}. ${r}`));
-  L.push(''); L.push('Note: tax calculated excluding Medicare levy and offsets, consistent with the PCG 2021/4 effective tax rate method.');
+  L.push(''); L.push('Note: PCG 2021/4 method per ATO guidance – franked dividends grossed up with tax calculated before franking offsets; company tax counted only on profits retained; each person\'s tax is the larger of tax on firm income alone or the top-slice amount; Medicare levy and other levies excluded.');
   $('#fileNote').value = L.join('\n');
 }
 
