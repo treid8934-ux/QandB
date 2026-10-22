@@ -6,6 +6,10 @@
 // isn't listed, the tab uses the latest year it has and shows a warning.
 
 const SBC_DATA = {
+    "2020": { name: "2019 - 2020 (FY20)", mnav: 6000000, sbeTurnover: 2000000, reductionTurnover: 2000000, retirementLimit: 500000, cgtCap: 1515000 },
+    "2021": { name: "2020 - 2021 (FY21)", mnav: 6000000, sbeTurnover: 2000000, reductionTurnover: 2000000, retirementLimit: 500000, cgtCap: 1565000 },
+    "2022": { name: "2021 - 2022 (FY22)", mnav: 6000000, sbeTurnover: 2000000, reductionTurnover: 2000000, retirementLimit: 500000, cgtCap: 1615000 },
+    "2023": { name: "2022 - 2023 (FY23)", mnav: 6000000, sbeTurnover: 2000000, reductionTurnover: 2000000, retirementLimit: 500000, cgtCap: 1650000 },
     "2024": {
         name: "2023 - 2024 (FY24)",
         mnav: 6000000,                // s152-15 maximum net asset value test
