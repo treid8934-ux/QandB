@@ -1,0 +1,149 @@
+<!-- SMALL BUSINESS CGT CONCESSIONS TAB -->
+<!-- Styles are scoped to #sbc-tool / #sbc-report so they don't affect the other tabs. -->
+<style>
+#sbc-tool{
+  --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --soft:#f8fafc; --card:#fff;
+  --navy:#0f2042; --navy2:#1b365d; --navy-50:#f0f4f9; --teal:#14b8a6; --teal-d:#0d9488; --teal-bg:#e6f7f5;
+  --green:#15803d; --green-bg:#dcfce7; --amber:#b45309; --amber-bg:#fef3c7; --red:#b91c1c; --red-bg:#fee2e2; --grey:#64748b; --grey-bg:#f1f5f9;
+  color:var(--ink); font-size:14px; line-height:1.45;
+}
+#sbc-tool *{box-sizing:border-box}
+#sbc-tool .top{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;border-radius:18px;padding:18px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+#sbc-tool .top h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.2px}
+#sbc-tool .top p{margin:2px 0 0;font-size:12px;color:#bfdbfe}
+#sbc-tool .acts{display:flex;gap:6px;flex-wrap:wrap}
+#sbc-tool .btn{border:1px solid var(--line);background:#fff;color:var(--ink);padding:7px 12px;border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+#sbc-tool .btn:hover{border-color:var(--teal)}
+#sbc-tool .btn.ghost{background:rgba(255,255,255,.08);color:#fff;border-color:rgba(255,255,255,.2)}
+#sbc-tool .btn.ghost:hover{background:rgba(255,255,255,.18)}
+#sbc-tool .btn.primary{background:var(--teal);border-color:var(--teal);color:#06231f}
+#sbc-tool .btn.small{padding:4px 9px;font-size:12px;border-radius:8px}
+#sbc-tool .btn.danger{color:var(--red)}
+#sbc-tool .btn.add{width:100%;justify-content:center;padding:10px;border:2px dashed #99e6dc;background:var(--teal-bg);color:var(--navy);margin-top:6px}
+#sbc-tool .btn.add:hover{border-style:solid;border-color:var(--teal)}
+#sbc-tool .btn svg{width:15px;height:15px}
+#sbc-tool .layout{display:grid;grid-template-columns:230px 1fr 290px;gap:16px;align-items:start}
+@media(max-width:1200px){#sbc-tool .layout{grid-template-columns:210px 1fr}#sbc-tool aside.side{grid-column:1 / -1}}
+@media(max-width:760px){#sbc-tool .layout{grid-template-columns:1fr}}
+#sbc-tool nav.steps{background:#fff;border:1px solid var(--line);border-radius:16px;padding:8px;position:sticky;top:150px}
+#sbc-tool nav.steps button{display:flex;width:100%;align-items:center;gap:8px;text-align:left;border:0;background:transparent;border-radius:10px;padding:8px 10px;cursor:pointer;font-size:13px;color:var(--muted);font-family:inherit}
+#sbc-tool nav.steps button:hover{background:var(--soft);color:var(--ink)}
+#sbc-tool nav.steps button.active{background:var(--navy-50);color:var(--navy);font-weight:700}
+#sbc-tool nav.steps .n{font-size:11px;color:#94a3b8;width:16px;flex:none}
+#sbc-tool nav.steps .grp{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;font-weight:700;padding:10px 10px 4px}
+#sbc-tool .dot{width:9px;height:9px;border-radius:50%;background:#cbd5e1;flex:none;margin-left:auto}
+#sbc-tool .dot.pass{background:var(--green)}#sbc-tool .dot.fail{background:var(--red)}#sbc-tool .dot.warn{background:#f59e0b}#sbc-tool .dot.na{background:#e2e8f0;border:1px solid #cbd5e1}
+#sbc-tool .card{background:#fff;border:1px solid #f1f5f9;box-shadow:0 1px 2px rgba(15,23,42,.05);border-radius:16px;padding:20px;margin-bottom:14px}
+#sbc-tool .card h3{margin:0 0 4px;font-size:18px;font-weight:800;color:var(--navy)}
+#sbc-tool .card h4{margin:18px 0 8px;font-size:12px;font-weight:700;color:var(--navy2);text-transform:uppercase;letter-spacing:.5px}
+#sbc-tool .lead{color:var(--muted);margin:0 0 14px;font-size:13px}
+#sbc-tool .ref{font-size:11px;font-weight:700;color:var(--teal-d);text-transform:uppercase;letter-spacing:.4px}
+#sbc-tool .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 12px}
+#sbc-tool .grid.g2{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+#sbc-tool label.f{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+#sbc-tool label.f small{font-weight:500;text-transform:none;letter-spacing:0;color:#94a3b8}
+#sbc-tool input[type=text],#sbc-tool input[type=date],#sbc-tool select,#sbc-tool textarea{border:1px solid var(--line);border-radius:9px;padding:8px 9px;font-size:14px;color:var(--ink);background:#fff;font-family:inherit;width:100%;font-weight:500;text-transform:none;letter-spacing:0}
+#sbc-tool input.money,#sbc-tool input.pct{text-align:right;font-variant-numeric:tabular-nums}
+#sbc-tool input:focus,#sbc-tool select:focus,#sbc-tool textarea:focus{outline:2px solid var(--teal-bg);border-color:var(--teal)}
+#sbc-tool textarea{min-height:64px;resize:vertical}
+#sbc-tool .q{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;gap:14px;justify-content:space-between;align-items:flex-start}
+#sbc-tool .q .qt{font-weight:600;font-size:13.5px}
+#sbc-tool .q .hint{font-size:12.5px;color:var(--muted);margin-top:3px}
+#sbc-tool .q.dim{opacity:.55}
+#sbc-tool .yn{display:flex;gap:4px;flex:none}
+#sbc-tool .yn button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 13px;cursor:pointer;font-weight:700;font-size:12.5px;font-family:inherit;color:var(--muted)}
+#sbc-tool .yn button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+#sbc-tool .res{border-radius:12px;padding:11px 14px;margin:10px 0;border-left:5px solid;font-size:13.5px}
+#sbc-tool .res>b:first-child{display:block;font-size:14px;margin-bottom:2px}
+#sbc-tool .res.pass{background:var(--green-bg);border-color:var(--green)}
+#sbc-tool .res.fail{background:var(--red-bg);border-color:var(--red)}
+#sbc-tool .res.warn{background:var(--amber-bg);border-color:#f59e0b}
+#sbc-tool .res.na,#sbc-tool .res.info{background:var(--grey-bg);border-color:#94a3b8}
+#sbc-tool .badge{display:inline-block;white-space:nowrap;flex:none;font-size:11px;font-weight:800;padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.3px}
+#sbc-tool .badge.pass{background:var(--green-bg);color:var(--green)}#sbc-tool .badge.fail{background:var(--red-bg);color:var(--red)}#sbc-tool .badge.warn{background:var(--amber-bg);color:var(--amber)}#sbc-tool .badge.na,#sbc-tool .badge.inc{background:var(--grey-bg);color:var(--grey)}
+#sbc-tool table.t{width:100%;border-collapse:collapse;font-size:13px}
+#sbc-tool table.t th{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--line);font-weight:700}
+#sbc-tool table.t td{padding:4px 6px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+#sbc-tool table.t td input,#sbc-tool table.t td select{padding:6px 7px;font-size:13px}
+#sbc-tool table.t .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+#sbc-tool table.t tr.tot td{font-weight:800;border-top:2px solid var(--line);border-bottom:0;padding-top:8px}
+#sbc-tool table.t tr.sub td{color:var(--muted)}
+#sbc-tool .tw{overflow-x:auto}
+#sbc-tool .calc{width:100%;border-collapse:collapse;font-size:13.5px}
+#sbc-tool .calc td{padding:6px 4px;border-bottom:1px dashed var(--line)}
+#sbc-tool .calc td:last-child{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+#sbc-tool .calc tr.tot td{font-weight:800;border-top:2px solid var(--navy);border-bottom:0;font-size:15px;color:var(--navy)}
+#sbc-tool .ent{border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;background:#fff}
+#sbc-tool .ent.tp{background:var(--navy-50);border-color:#c7d4e5}
+#sbc-tool .ent .eh{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+#sbc-tool .ent .eh b{font-size:14px;color:var(--navy)}
+#sbc-tool details.more{border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-top:8px;background:var(--soft)}
+#sbc-tool details.more summary{cursor:pointer;font-weight:600;font-size:12.5px;color:var(--navy2)}
+#sbc-tool .navrow{display:flex;justify-content:space-between;margin-top:6px}
+#sbc-tool aside.side .card{padding:16px}
+#sbc-tool aside.side h5{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800}
+#sbc-tool .bc{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:5px 0;border-bottom:1px solid #f1f5f9}
+#sbc-tool .big{font-size:26px;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums}
+#sbc-tool .banner{background:var(--amber-bg);border:1px solid #fcd34d;color:#78350f;border-radius:12px;padding:10px 14px;font-size:13px;margin-bottom:14px}
+#sbc-tool .muted{color:var(--muted)}
+#sbc-tool .chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);font-weight:600}
+#sbc-tool .hidden{display:none!important}
+#sbc-tool ul,#sbc-report ul{list-style:disc}
+#sbc-tool .bc{align-items:flex-start}
+
+/* ---------- REPORT (screen preview + print) ---------- */
+#sbc-report{color:#111827;font-size:12px;line-height:1.45;background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:28px 32px}
+#sbc-report h1{font-size:20px;margin:0;color:#0f2042}
+#sbc-report h2{font-size:13px;margin:22px 0 6px;color:#0f2042;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #0f2042;padding-bottom:3px;break-after:avoid}
+#sbc-report h3{font-size:12px;margin:12px 0 4px;color:#1b365d;break-after:avoid}
+#sbc-report .rhead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #14b8a6;padding-bottom:10px;margin-bottom:12px}
+#sbc-report .firm{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#0d9488;font-weight:800}
+#sbc-report table{width:100%;border-collapse:collapse;margin:4px 0 8px;break-inside:auto}
+#sbc-report tr{break-inside:avoid}
+#sbc-report th{text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #d1d5db;padding:4px 5px}
+#sbc-report td{border-bottom:1px solid #f3f4f6;padding:4px 5px;vertical-align:top}
+#sbc-report td.n,#sbc-report th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+#sbc-report tr.tot td{font-weight:800;border-top:1.5px solid #111827}
+#sbc-report .kv td:first-child{color:#4b5563;width:42%}
+#sbc-report .st{font-weight:800;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap}
+#sbc-report .st.pass{background:#dcfce7;color:#166534}#sbc-report .st.fail{background:#fee2e2;color:#991b1b}#sbc-report .st.warn{background:#fef3c7;color:#92400e}#sbc-report .st.na,#sbc-report .st.inc{background:#f3f4f6;color:#4b5563}
+#sbc-report .note{background:#f9fafb;border-left:3px solid #14b8a6;padding:6px 9px;margin:4px 0 8px;white-space:pre-wrap}
+#sbc-report .sign{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}
+#sbc-report .sign div{border-top:1px solid #111827;padding-top:4px;font-size:11px}
+#sbc-report .foot{margin-top:18px;font-size:10px;color:#6b7280}
+#sbc-report .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media print{
+  #sbc-tool .sbc-app{display:none!important}
+  #sbc-tool #sbc-report-wrap{display:block!important}
+  #sbc-report{border:0;padding:0;border-radius:0;font-size:10.5px}
+  #sbc-report h2{font-size:12px}
+  #sbc-tool .top{display:none!important}
+  @page{margin:14mm 12mm}
+}
+</style>
+
+<div id="view-sb-cgt">
+<div id="sbc-tool">
+  <div class="top no-print">
+    <div>
+      <h2>Small Business CGT Concessions</h2>
+      <p>Capital gain, basic conditions, the four Division 152 concessions and a record-keeping report, in procedure order.</p>
+    </div>
+    <div class="acts">
+      <button class="btn ghost" id="sbc-btn-save" type="button"><i data-lucide="download"></i> Save case</button>
+      <button class="btn ghost" id="sbc-btn-load" type="button"><i data-lucide="upload"></i> Open case</button>
+      <button class="btn ghost" id="sbc-btn-reset" type="button"><i data-lucide="rotate-ccw"></i> New case</button>
+      <button class="btn primary" id="sbc-btn-print" type="button"><i data-lucide="printer"></i> Print report</button>
+      <input type="file" id="sbc-file" accept=".json,application/json" class="hidden">
+    </div>
+  </div>
+
+  <div class="sbc-app layout">
+    <nav class="steps" id="sbc-nav"></nav>
+    <main id="sbc-main"></main>
+    <aside class="side" id="sbc-side"></aside>
+  </div>
+
+  <div id="sbc-report-wrap" class="hidden"><div id="sbc-report"></div></div>
+</div>
+</div>
