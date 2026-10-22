@@ -88,6 +88,10 @@
 #sbc-tool .muted{color:var(--muted)}
 #sbc-tool .chk{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);font-weight:600}
 #sbc-tool .hidden{display:none!important}
+#sbc-tool .go{cursor:pointer}
+#sbc-tool tr.go:hover td,#sbc-tool .bc.go:hover{background:var(--navy-50)}
+#sbc-tool .flash{animation:sbcflash 1.6s ease}
+@keyframes sbcflash{0%,40%{background:#fef3c7}100%{background:transparent}}
 #sbc-tool .dt{position:relative;display:block;min-width:130px}
 #sbc-tool .dt input[type=text]{padding-right:34px;font-variant-numeric:tabular-nums}
 #sbc-tool .dt input.bad{border-color:#dc2626;background:#fef2f2}

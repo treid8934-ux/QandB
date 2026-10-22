@@ -96,7 +96,7 @@ function blankState() {
         aat: { periods: [], ceased: 'no', ceasedDate: '', fin: '', passive: '', passiveExc: '', resident: '', bs: [] },
         objType: '',
         people: [],
-        shr: { bizBefore: '', objNet: '', objTurn: '', membership: '' },
+        shr: { bizBefore: '', objEnt: '', objNet: '', objTurn: '', membership: '' },
         alt: { partnerAsset: '', passive: '', partnerPassive: '' },
         dec: { deceased: '', could: '', within2: '' },
         f15: { siYears: '', dtLoss: '' },
@@ -109,13 +109,14 @@ let R = {};
 let step = 'setup';
 
 const TPL = {
-    entity: () => ({ id: uid(), name: '', type: 'company', rel: 'connected', ctl: { pct: '', comm: '', wish: '', dist: '', aff: '' }, assets: [], liabs: [], to: { prior: '', dPrior: '', cur: '', dCur: '' } }),
+    entity: () => ({ id: uid(), name: '', type: 'company', rel: 'other', relAuto: true, connFrom: '', connTo: '', objGroup: false, ctl: { pct: '', affPct: '', via: '', viaPct: '', comm: '', wish: '', dist: '', aff: '' }, assets: [], liabs: [], to: { prior: '', dPrior: '', cur: '', dCur: '' } }),
     asset: path => ({ desc: '', mv: '', treat: /entities\.\d+/.test(path) && ['affiliate', 'spouse', 'affconn'].includes(getP(path.replace(/\.assets$/, '.rel'))) ? 'notbiz' : 'inc', use: '' }),
     liab: () => ({ desc: '', amt: '', treat: 'inc' }),
     period: () => ({ from: '', to: '', user: 'tp', note: '' }),
     fperiod: () => ({ from: '', to: '' }),
     bs: () => ({ desc: '', cat: 'active', mv: '', purpose: false, subPct: '', subActive: '', subTotal: '' }),
-    person: () => ({ id: uid(), name: '', dob: '', spouseOf: '', tpV: '', tpD: '', tpC: '', tpI: '', obV: '', obD: '', obC: '', obI: '', incap: '', retire: '', priorUsed: '', retPct: '' }),
+    person: () => ({ id: uid(), name: '', dob: '', spouseOf: '', tpV: '', tpD: '', tpC: '', tpI: '', tpInd: [], obV: '', obD: '', obC: '', obI: '', obInd: [], incap: '', retire: '', priorUsed: '', retPct: '' }),
+    ind: () => ({ via: '', a: '', b: '' }),
     repl: () => ({ desc: '', kind: 'asset', acq: '', active: '', cost: '' })
 };
 
@@ -162,6 +163,8 @@ function compute() {
     r.cb1 = num(g.e1); r.cb2 = sum(g.e2); r.cb3 = sum(g.e3); r.cb4 = sum(g.e4); r.cb5 = num(g.e5); r.cbRed = sum(g.red);
     r.cb = r.cb1 + r.cb2 + r.cb3 + r.cb4 + r.cb5 - r.cbRed;
     r.rcb = r.cb1 + r.cb2 + num(g.rcbE3) + r.cb4 + r.cb5 - r.cbRed;
+    r.rcbv = { e1: r.cb1, e5: r.cb5 };
+    ['e2', 'e4', 'red'].forEach(grp => CB[grp].forEach(([k]) => { r.rcbv[grp + '_' + k] = (grp === 'red' ? -1 : 1) * num(g[grp][k]); }));
     r.proceeds = num(g.proceeds);
     r.diff = r.proceeds - r.cb;
     r.gross = Math.max(r.diff, 0);
@@ -216,8 +219,14 @@ function compute() {
     const ents = [{ id: 'tp', name: tp.name || 'Taxpayer', type: tp.type, rel: 'tp', data: S.tpm }].concat(S.entities.map(e => ({ id: e.id, name: e.name || 'Unnamed entity', type: e.type, rel: e.rel, data: e, ctl: e.ctl })));
     r.ents = {};
     let mTot = 0, anyM = false, toP = 0, toC = 0, anyT = false;
+    const fyWin = fy => [D(`${fy - 1}-07-01`), D(`${fy}-06-30`)];
+    const connIn = (e, lo, hi) => { if (e.id === 'tp' || lo == null) return true; const f = D(e.data.connFrom), t = D(e.data.connTo); return (f == null || f <= hi) && (t == null || t >= lo); };
+    const connAll = (e, lo, hi) => { if (e.id === 'tp' || lo == null) return true; const f = D(e.data.connFrom), t = D(e.data.connTo); return (f == null || f <= lo) && (t == null || t >= hi); };
+    const [cLo, cHi] = fyWin(r.fy), [pLo, pHi] = fyWin(r.fy - 1);
     ents.forEach(e => {
-        const counts = e.rel !== 'other';
+        const before = r.ev != null ? r.ev - DAY : null;
+        const connAtEvent = connIn(e, before, before);
+        const counts = e.rel !== 'other' && connAtEvent;
         let incl = 0, excl = 0, liab = 0;
         (e.data.assets || []).forEach(x => {
             const mv = num(x.mv); if (has(x.mv)) anyM = true;
@@ -228,13 +237,17 @@ function compute() {
         });
         (e.data.liabs || []).forEach(x => { if (x.treat !== 'exc') liab += num(x.amt); });
         const net = incl - liab;
-        const tcounts = ['tp', 'connected', 'affiliate', 'spouse'].includes(e.rel);
+        const relT = ['tp', 'connected', 'affiliate', 'spouse'].includes(e.rel);
+        const inP = relT && connIn(e, pLo, pHi), inC = relT && connIn(e, cLo, cHi);
+        const partP = inP && !connAll(e, pLo, pHi), partC = inC && !connAll(e, cLo, cHi);
+        const tcounts = inP || inC;
         const t = e.data.to || {};
         const pNet = num(t.prior) - num(t.dPrior), cNet = num(t.cur) - num(t.dCur);
         if (has(t.prior) || has(t.cur)) anyT = true;
-        r.ents[e.id] = { name: e.name, rel: e.rel, type: e.type, incl, excl, liab, net, counts, tcounts, pNet, cNet, sugg: e.ctl ? ctlSuggest(e.data) : null };
+        r.ents[e.id] = { name: e.name, rel: e.rel, type: e.type, incl, excl, liab, net, counts, connAtEvent, tcounts, inP, inC, partP, partC, pNet, cNet, sugg: e.ctl ? ctlSuggest(e.data) : null };
         if (counts) mTot += net;
-        if (tcounts) { toP += pNet; toC += cNet; }
+        if (inP) toP += pNet;
+        if (inC) toC += cNet;
     });
     r.entList = ents;
     r.entS = (S.entities.length || S.noEnts) ? 'pass' : 'inc';
@@ -272,7 +285,13 @@ function compute() {
     const at = S.aat;
     r.relEnd = yes(at.ceased) && D(at.ceasedDate) ? D(at.ceasedDate) : r.ev;
     r.relDays = daysIncl(r.start, r.relEnd);
-    r.activeDays = overlapDays(at.periods, r.start, r.relEnd);
+    r.activeDays = overlapDays(at.periods.map(x => {
+        const en = S.entities.find(e => String(e.id) === String(x.user));
+        if (!en) return x;
+        const f = D(en.connFrom), t = D(en.connTo), a = D(x.from), b = D(x.to);
+        return { from: iso(f != null && (a == null || f > a) ? f : a), to: iso(t != null && (b == null || t < b) ? t : b) };
+    }), r.start, r.relEnd);
+    r.periodsClipped = at.periods.some(x => { const en = S.entities.find(e => String(e.id) === String(x.user)); return en && (has(en.connFrom) || has(en.connTo)); });
     r.longHold = r.ownYears > RU.longHoldYears;
     r.needDays = r.longHold ? Math.ceil(RU.longHoldActiveYears * 365.25) : Math.ceil(r.relDays / 2);
     const ai = [];
@@ -307,13 +326,30 @@ function compute() {
     /* ---- people: significant individuals & stakeholders ---- */
     r.objType = S.objType || (a.kind === 'shares' ? 'company' : 'fixed');
     r.needPeople = r.isEntity || r.equity;
-    const partOf = (v, d, c, i, isCo) => { const vals = (isCo ? [v, d, c] : [d, c]).filter(has).map(num); if (!vals.length && !has(i)) return null; return ((vals.length ? Math.min(...vals) : 0) + num(i)) / 100; };
+    // Small business participation % = direct (smallest of voting / dividend or income / capital) + indirect
+    // Indirect = sum over interposed entities of (individual's % in that entity × that entity's % in this one) — s152-70
+    const indOf = (rows, legacy) => (rows || []).reduce((t, x) => t + num(x.a) * num(x.b) / 100, 0) + num(legacy);
+    const partOf = (p, pre, isCo) => {
+        const vals = (isCo ? [p[pre + 'V'], p[pre + 'D'], p[pre + 'C']] : [p[pre + 'D'], p[pre + 'C']]).filter(has).map(num);
+        const rows = (p[pre + 'Ind'] || []).filter(x => has(x.a) && has(x.b));
+        if (!vals.length && !rows.length && !has(p[pre + 'I'])) return { part: null, direct: null, ind: 0, err: '' };
+        const direct = vals.length ? Math.min(...vals) : 0, ind = indOf(rows, p[pre + 'I']);
+        const all = (isCo ? [p[pre + 'V'], p[pre + 'D'], p[pre + 'C']] : [p[pre + 'D'], p[pre + 'C']]).filter(has).map(num).concat((p[pre + 'Ind'] || []).flatMap(x => [x.a, x.b]).filter(has).map(num));
+        let err = '';
+        if (all.some(v => v < 0 || v > 100)) err = 'A percentage is below 0% or above 100%.';
+        else if (direct + ind > 100 + 1e-9) err = `Direct ${pct(direct / 100, 2)} + indirect ${pct(ind / 100, 2)} is more than 100%.`;
+        return { part: Math.min(direct + ind, 100) / 100, direct: direct / 100, ind: ind / 100, err };
+    };
     r.people = {};
     S.people.forEach(p => {
-        const tpPart = partOf(p.tpV, p.tpD, p.tpC, p.tpI, r.isCo);
-        const obPart = partOf(p.obV, p.obD, p.obC, p.obI, r.objType === 'company');
-        r.people[p.id] = { name: p.name || 'Unnamed', tpPart, obPart, siTp: tpPart != null && tpPart >= RU.significantPct, siOb: obPart != null && obPart >= RU.significantPct, age: ageAt(D(p.dob), r.ev) };
+        const tp_ = partOf(p, 'tp', r.isCo), ob_ = partOf(p, 'ob', r.objType === 'company');
+        const tpPart = tp_.part, obPart = ob_.part;
+        r.people[p.id] = { name: p.name || 'Unnamed', tpPart, obPart, tpD: tp_, obD: ob_, siTp: tpPart != null && tpPart >= RU.significantPct, siOb: obPart != null && obPart >= RU.significantPct, age: ageAt(D(p.dob), r.ev) };
     });
+    // Totals across individuals: dividend / income and capital can't exceed 100%; voting can (joint holdings count 100% each)
+    const totals = pre => { const t = { V: 0, D: 0, C: 0 }; S.people.forEach(p => ['V', 'D', 'C'].forEach(k => { t[k] += num(p[pre + k]); })); return t; };
+    r.pTot = { tp: totals('tp'), ob: totals('ob') };
+    r.pErr = S.people.some(p => r.people[p.id].tpD.err || r.people[p.id].obD.err);
     S.people.forEach(p => {
         const me = r.people[p.id], sp = p.spouseOf ? r.people[p.spouseOf] : null;
         me.stTp = me.siTp || (!!sp && sp.siTp && (me.tpPart || 0) > 0);
@@ -324,16 +360,16 @@ function compute() {
         if (r.isInd) {
             const me = tpRow ? r.people[tpRow.id] : null;
             r.stakeS = !me || me.obPart == null ? 'inc' : me.stOb ? 'pass' : 'fail';
-            r.stakeWhy = me ? (me.siOb ? 'Taxpayer is a significant individual of the object entity' : me.stOb ? 'Taxpayer is the spouse of a significant individual with a participation interest' : 'Taxpayer is not a CGT concession stakeholder') : '';
+            r.stakeWhy = me ? (me.siOb ? 'Taxpayer is a significant individual of the entity sold' : me.stOb ? 'Taxpayer is the spouse of a significant individual with a participation interest' : 'Taxpayer is not a CGT concession stakeholder') : '';
         } else {
             const tot = S.people.filter(p => r.people[p.id].stOb).reduce((t, p) => t + (r.people[p.id].tpPart || 0), 0);
             r.ninety = tot;
             r.stakeS = !S.people.length ? 'inc' : tot >= RU.ninetyPct - 1e-9 ? 'pass' : 'fail';
-            r.stakeWhy = `Stakeholders of the object entity hold ${pct(tot, 2)} of the taxpayer (90% needed)`;
+            r.stakeWhy = `Stakeholders of the entity sold hold ${pct(tot, 2)} of the taxpayer (90% needed)`;
         }
     }
     r.siTpAny = S.people.some(p => r.people[p.id].siTp);
-    r.peopleS = !r.needPeople ? 'na' : r.equity ? r.stakeS : !S.people.length ? 'inc' : r.siTpAny ? 'pass' : 'warn';
+    r.peopleS = !r.needPeople ? 'na' : r.pErr ? 'fail' : r.equity ? r.stakeS : !S.people.length ? 'inc' : r.siTpAny ? 'pass' : 'warn';
 
     /* ---- basic conditions ---- */
     const bi = [];
@@ -356,10 +392,19 @@ function compute() {
         if (r.post2018) {
             const relyTurn = r.mnavPass !== true;
             const c2a = relyTurn ? (yes(S.shr.bizBefore) ? 'pass' : no(S.shr.bizBefore) ? 'fail' : 'inc') : 'pass';
-            const on = has(S.shr.objNet) ? num(S.shr.objNet) <= r.T.mnav : null, ot = has(S.shr.objTurn) ? num(S.shr.objTurn) < r.T.sbe : null;
+            // Object company / trust tested on its own group: itself + its affiliates + entities it controls at 20%
+            const grp = S.entities.filter(e => String(S.shr.objEnt) === String(e.id) || e.objGroup);
+            const fromReg = has(S.shr.objEnt);
+            const regNet = grp.reduce((t, e) => t + (r.ents[e.id] ? r.ents[e.id].net : 0), 0);
+            const regHasNet = grp.some(e => (e.assets || []).some(x => has(x.mv)));
+            const tP = grp.reduce((t, e) => t + (r.ents[e.id] ? r.ents[e.id].pNet : 0), 0), tC = grp.reduce((t, e) => t + (r.ents[e.id] ? r.ents[e.id].cNet : 0), 0);
+            const regHasTo = grp.some(e => has((e.to || {}).prior) || has((e.to || {}).cur));
+            const netV = has(S.shr.objNet) ? num(S.shr.objNet) : (fromReg && regHasNet ? regNet : null);
+            const turnV = has(S.shr.objTurn) ? num(S.shr.objTurn) : (fromReg && regHasTo ? Math.min(...[grp.some(e => has((e.to || {}).prior)) ? tP : null, grp.some(e => has((e.to || {}).cur)) ? tC : null].filter(v => v != null)) : null);
+            const on = netV != null ? netV <= r.T.mnav : null, ot = turnV != null ? turnV < r.T.sbe : null;
             const c2b = (on || ot) ? 'pass' : (on === false && ot === false) ? 'fail' : 'inc';
-            r.objTest = { on, ot, s: c2b };
-            bi.push({ k: 'C2.1', t: 'If relying on turnover (not the $6m test), taxpayer carried on a business just before the event', s: c2a, ref: '152-10(2)(c)' });
+            r.objTest = { on, ot, s: c2b, netV, turnV, netSrc: has(S.shr.objNet) ? 'entered' : 'register', turnSrc: has(S.shr.objTurn) ? 'entered' : 'register', grp: grp.map(e => e.name || 'Unnamed entity') };
+            bi.push({ k: 'C2.1', t: relyTurn ? 'Relying on turnover (not the $6m test): taxpayer carried on a business just before the event' : 'Taxpayer passes the $6m test, so it need not carry on a business', s: c2a, ref: '152-10(2)(c)' });
             bi.push({ k: 'C2.2', t: 'Object company / trust passes the $6m test or is a CGT SBE (20% control threshold)', s: c2b, ref: '152-10(2)(c)' });
         }
     }
@@ -494,29 +539,52 @@ function worst(items) {
 
 function ctlSuggest(e) {
     const c = e.ctl || {};
+    const RU = SBC_RULES;
+    let warn = '';
+    // Holding through another entity: only counts if the taxpayer controls that entity (s328-125(7) chain of control)
+    let viaCtl = false;
+    if (has(c.via) && has(c.viaPct)) {
+        const ve = S.entities.find(x => String(x.id) === String(c.via));
+        const vp = num(c.viaPct) / 100;
+        if (ve && ve.rel === 'connected' && vp >= RU.controlPct) viaCtl = true;
+        else if (ve && vp > 0) warn = ve.rel === 'connected'
+            ? `${esc(ve.name || 'That entity')} holds ${pct(vp, 1)}, under 40%, so it doesn't give indirect control. Its holding is not added to the direct percentage.`
+            : `${esc(ve.name || 'That entity')} isn't controlled by the taxpayer, so its ${pct(vp, 1)} holding doesn't count toward control at all (it is not added to the direct percentage).`;
+    }
     if (e.type === 'dtrust') {
-        if (yes(c.wish)) return { rel: 'connected', t: 'Trustee acts in accordance with the taxpayer\'s wishes: taxpayer controls the trust, so they are connected.' };
+        if (yes(c.wish)) return { rel: 'connected', t: 'Trustee acts in accordance with the taxpayer\'s wishes: taxpayer controls the trust, so they are connected.', warn };
+        if (viaCtl) return { rel: 'connected', t: 'Indirect control through an entity the taxpayer controls: connected.', warn };
         if (has(c.dist)) {
             const d = num(c.dist) / 100;
-            if (d >= SBC_RULES.controlPct) {
-                if (d < SBC_RULES.commissionerBand && yes(c.comm)) return { rel: 'other', t: 'Distributions are 40–50%, but the Commissioner has determined another entity controls the trust: not connected.' };
-                return { rel: 'connected', t: `Received ${pct(d, 1)} of income or capital distributions in one of the 4 prior years: deemed control, so connected.` };
+            if (d >= RU.controlPct) {
+                if (d < RU.commissionerBand && yes(c.comm)) return { rel: 'other', t: 'Distributions are 40–50%, but the Commissioner has determined another entity controls the trust: not connected.', warn };
+                return { rel: 'connected', t: `Received ${pct(d, 1)} of income or capital distributions in one of the 4 prior years: deemed control, so connected.`, warn };
             }
-            return { rel: 'other', t: 'Under 40% of distributions and trustee not accustomed to act on the taxpayer\'s wishes: no direct control.' };
+            return { rel: 'other', t: 'Under 40% of distributions and trustee not accustomed to act on the taxpayer\'s wishes: no control.', warn };
         }
-        return null;
+        return warn ? { rel: null, t: '', warn } : null;
     }
-    if (has(c.pct)) {
-        const p = num(c.pct) / 100;
-        if (p >= SBC_RULES.controlPct) {
-            if (p < SBC_RULES.commissionerBand && yes(c.comm)) return { rel: 'other', t: '40–50% interest, but the Commissioner has determined another entity controls it: not connected.' };
-            return { rel: 'connected', t: `${pct(p, 1)} interest (with affiliates) is at least 40%: control exists, so connected.` };
+    if (has(c.pct) || has(c.affPct)) {
+        const p = (num(c.pct) + num(c.affPct)) / 100;
+        const parts = has(c.affPct) && num(c.affPct) ? ` (${num(c.pct)}% direct + ${num(c.affPct)}% held by affiliates)` : '';
+        if (p >= RU.controlPct) {
+            if (p < RU.commissionerBand && yes(c.comm)) return { rel: 'other', t: `${pct(p, 1)}${parts}, but the Commissioner has determined another entity controls it: not connected.`, warn };
+            return { rel: 'connected', t: `${pct(p, 1)}${parts} is at least 40%: the taxpayer controls it, so it is connected.`, warn };
         }
-        if ((e.type === 'individual' || e.type === 'company') && yes(c.aff)) return { rel: 'affiliate', t: 'Under 40%, but acts in accordance with the taxpayer\'s wishes in its business affairs: affiliate.' };
-        return { rel: 'other', t: 'Under 40% direct interest: no direct control. Consider indirect control through another entity.' };
+        if (viaCtl) return { rel: 'connected', t: 'Indirect control: the taxpayer controls an entity that holds at least 40% of this entity.', warn };
+        if ((e.type === 'individual' || e.type === 'company') && yes(c.aff)) return { rel: 'affiliate', t: `Under 40% (${pct(p, 1)}), but it acts in accordance with the taxpayer\'s wishes in its business affairs: affiliate.`, warn };
+        return { rel: 'other', t: `${pct(p, 1)}${parts} is under 40%: no control. Not connected unless another route applies (e.g. both controlled by the same third party).`, warn };
     }
-    if ((e.type === 'individual' || e.type === 'company') && yes(c.aff)) return { rel: 'affiliate', t: 'Acts in accordance with the taxpayer\'s wishes in its business affairs: affiliate.' };
-    return null;
+    if (viaCtl) return { rel: 'connected', t: 'Indirect control: the taxpayer controls an entity that holds at least 40% of this entity.', warn };
+    if ((e.type === 'individual' || e.type === 'company') && yes(c.aff)) return { rel: 'affiliate', t: 'Acts in accordance with the taxpayer\'s wishes in its business affairs: affiliate.', warn };
+    return warn ? { rel: null, t: '', warn } : null;
+}
+
+// Relationship follows the control check unless it has been set by hand
+function applyAutoRel() {
+    for (let pass = 0; pass < 3; pass++) { // repeat so chains (A controls B controls C) settle
+        S.entities.forEach(e => { if (e.relAuto) { const sg = ctlSuggest(e); if (sg && sg.rel) e.rel = sg.rel; } });
+    }
 }
 
 /* ======================= UI builders ======================= */
@@ -564,6 +632,14 @@ const STEPS = [
 ];
 
 const P = {};
+const inObjGroup = e => e.id !== 'tp' && R.equity && R.post2018 && (String(S.shr.objEnt) === String(e.id) || !!e.data.objGroup);
+const entTag = e => {
+    const rr = R.ents[e.id] || {};
+    const bits = [];
+    if (e.id !== 'tp' && !rr.connAtEvent && e.rel !== 'other') bits.push(badge('warn', 'not connected just before event – excluded'));
+    if (e.rel === 'other' && inObjGroup(e)) bits.push(badge('na', 'C2.2 group only – not in taxpayer total'));
+    return bits.join(' ');
+};
 
 P.setup = () => {
     const t = S.tp.type;
@@ -601,27 +677,31 @@ P.asset = () => {
 };
 
 P.gain = () => {
-    const row = (grp, k, t) => `<tr><td>${t}</td><td style="width:170px">${tmon(`gain.${grp}.${k}`)}</td></tr>`;
+    // Two columns: cost base (entered) and reduced cost base (filled in automatically; shown when there is a loss)
+    const rc = key => `<td class="num rcbcol">${o('rcbv.' + key)}</td>`;
+    const row = (grp, k, t) => `<tr><td>${t}</td><td style="width:170px">${tmon(`gain.${grp}.${k}`)}</td>${grp === 'e3' ? '<td class="num rcbcol muted">excluded</td>' : rc(grp + '_' + k)}</tr>`;
+    const head = (t, extra = '') => `<tr class="sub"><td>${t}</td><td></td><td class="rcbcol muted" style="font-size:11px">${extra}</td></tr>`;
     return `<div class="card"><h3>Capital gain</h3><p class="lead">Capital proceeds less cost base. Small business concessions only apply to gains, not losses. The indexation method is not used here.</p>
     <div class="grid">${F('Capital proceeds', tmon('gain.proceeds'))}</div>
     <h4>Cost base</h4>
-    <div class="tw"><table class="t"><tbody>
-    <tr><td><b>1st element</b> – money paid / market value given to acquire the asset <div class="muted" style="font-size:12px">Use market value if nothing was paid or the dealing was not at arm's length.</div></td><td style="width:170px">${tmon('gain.e1')}</td></tr>
-    <tr class="sub"><td colspan="2"><b>2nd element</b> – incidental costs of acquisition and disposal</td></tr>${CB.e2.map(([k, t]) => row('e2', k, t)).join('')}
-    <tr class="sub"><td colspan="2"><b>3rd element</b> – non-deductible costs of owning (acquired after 20 Aug 1991; not collectables / personal use assets)</td></tr>${CB.e3.map(([k, t]) => row('e3', k, t)).join('')}
-    <tr class="sub"><td colspan="2"><b>4th element</b> – capital expenditure</td></tr>${CB.e4.map(([k, t]) => row('e4', k, t)).join('')}
-    <tr><td><b>5th element</b> – capital expenditure to establish, preserve or defend title</td><td>${tmon('gain.e5')}</td></tr>
-    <tr class="sub"><td colspan="2"><b>Less reductions</b></td></tr>${CB.red.map(([k, t]) => row('red', k, t)).join('')}
-    <tr class="tot"><td>Cost base</td><td class="num">${o('cb')}</td></tr>
+    <div class="banner rcbcol"><b>Capital proceeds are less than the cost base.</b> The reduced cost base is shown alongside. It is filled in from the cost base automatically, except the 3rd element costs of ownership, which the law leaves out (s110-55(2)).</div>
+    <div class="tw" id="sbc-cbt"><table class="t"><thead><tr><th></th><th class="num">Cost base</th><th class="num rcbcol">Reduced cost base</th></tr></thead><tbody>
+    <tr><td><b>1st element</b> – money paid / market value given to acquire the asset <div class="muted" style="font-size:12px">Use market value if nothing was paid or the dealing was not at arm's length.</div></td><td style="width:170px">${tmon('gain.e1')}</td>${rc('e1')}</tr>
+    ${head('<b>2nd element</b> – incidental costs of acquisition and disposal')}${CB.e2.map(([k, t]) => row('e2', k, t)).join('')}
+    ${head('<b>3rd element</b> – costs of owning the asset <div class="muted" style="font-size:12px">Only costs that were <b>not</b> deductible (and not for collectables / personal use assets, or assets acquired before 21 Aug 1991). They increase the cost base but are excluded from the reduced cost base.</div>', 'not in reduced cost base')}${CB.e3.map(([k, t]) => row('e3', k, t)).join('')}
+    <tr class="rcbcol"><td><b>Reduced cost base 3rd element</b> – assessable balancing adjustments <div class="muted" style="font-size:12px">Only where a balancing adjustment for the asset (or part of it, e.g. a depreciating component) was included in assessable income. Usually nil.</div></td><td></td><td style="width:170px">${tmon('gain.rcbE3')}</td></tr>
+    ${head('<b>4th element</b> – capital expenditure')}${CB.e4.map(([k, t]) => row('e4', k, t)).join('')}
+    <tr><td><b>5th element</b> – capital expenditure to establish, preserve or defend title</td><td>${tmon('gain.e5')}</td>${rc('e5')}</tr>
+    ${head('<b>Less reductions</b>')}${CB.red.map(([k, t]) => row('red', k, t)).join('')}
+    <tr class="tot"><td>Total</td><td class="num">${o('cb')}</td><td class="num rcbcol">${o('rcb')}</td></tr>
     </tbody></table></div>
     <table class="calc" style="margin-top:12px"><tr><td>Capital proceeds</td><td>${o('proceeds')}</td></tr><tr><td>Less cost base</td><td>${o('cb')}</td></tr><tr class="tot"><td>Gross capital gain</td><td>${o('gross')}</td></tr></table>
-    <details class="more"${R.diff < 0 ? ' open' : ''}><summary>Reduced cost base (if proceeds are less than cost base)</summary>
-      <div class="grid" style="margin-top:8px">${F('3rd element: assessable balancing adjustments', tmon('gain.rcbE3'))}${F('Reduced cost base', `<input type="text" disabled data-o="rcb" data-f="money-in">`)}${F('Capital loss', `<input type="text" disabled data-o="loss" data-f="money-in">`)}</div>
-      <p class="muted" style="font-size:12px;margin:8px 0 0">The reduced cost base excludes the 3rd element ownership costs. If proceeds fall between the reduced cost base and cost base, there is no gain or loss.</p></details>
+    <table class="calc rcbcol" style="margin-top:6px"><tr><td>Ownership costs excluded from the reduced cost base</td><td>${o('cb3')}</td></tr><tr><td>Reduced cost base</td><td>${o('rcb')}</td></tr><tr class="tot"><td>Capital loss (reduced cost base less proceeds)</td><td>${o('loss')}</td></tr></table>
+    <p class="muted rcbcol" style="font-size:12px">If proceeds fall between the reduced cost base and the cost base there is neither a gain nor a loss. Capital losses can't use the small business concessions.</p>
     <h4>Capital losses</h4>
     <div class="grid">${F('Current year capital losses', tmon('gain.lossCur'))}${F('Carried-forward net capital losses', tmon('gain.lossCf'))}</div>
     <p class="muted" style="font-size:12px">Losses are applied before the discount and the 50% reduction. If the 15 year exemption applies, the whole gain is disregarded and the losses are kept for later.</p>
-    ${res(R.gainS, R.gainS === 'pass' ? 'Capital gain arises' : R.gainS === 'fail' ? 'No capital gain: the concessions do not apply' : 'Enter capital proceeds and cost base')}
+    <div data-o="gainRes" data-f="html"></div>
     ${notes('gain')}</div>`;
 };
 
@@ -653,30 +733,35 @@ P.discount = () => {
 
 P.entities = () => {
     const e = S.entities;
+    const showObj = R.equity && R.post2018;
     const card = (x, i) => {
-        const sg = R.ents[x.id] && R.ents[x.id].sugg;
         const isDT = x.type === 'dtrust';
-        return `<div class="ent"><div class="eh"><b>${esc(x.name || 'Entity ' + (i + 1))}</b>${delBtn('entities', i)}</div>
-        <div class="grid">${F('Name', tin(`entities.${i}.name`))}${F('Type', tsel(`entities.${i}.type`, ENT_TYPES))}${F('Relationship to taxpayer', tsel(`entities.${i}.rel`, REL))}</div>
-        <details class="more"${sg ? '' : ''}><summary>Control / affiliate check</summary>
+        const others = [['', '—']].concat(S.entities.filter(y => y.id !== x.id).map(y => [String(y.id), y.name || 'Unnamed entity']));
+        return `<div class="ent"><div class="eh"><b><span data-o="entName.${x.id}" data-f="text">${esc(x.name || 'Entity ' + (i + 1))}</span></b>${delBtn('entities', i)}</div>
+        <div class="grid">${F('Name', tin(`entities.${i}.name`))}${F('Type', tsel(`entities.${i}.type`, ENT_TYPES))}
+          ${F('Relationship to taxpayer', tsel(`entities.${i}.rel`, REL), x.relAuto ? 'set by the control check' : `set by hand · <a href="#" data-act="relauto" data-i="${i}">use control check</a>`)}</div>
+        <div class="grid" style="margin-top:8px">${F('Connected / affiliate from', tdate(`entities.${i}.connFrom`), 'blank = throughout')}${F('Connected / affiliate until', tdate(`entities.${i}.connTo`), 'e.g. date sold out')}</div>
+        ${showObj ? `<label class="chk" style="margin-top:8px"><input type="checkbox" data-k="entities.${i}.objGroup" ${x.objGroup ? 'checked' : ''}> In the group of the company / trust being sold (its affiliate, or an entity it controls at 20%+) – used for C2.2</label>` : ''}
+        <h4>Control / affiliate check</h4>
           ${isDT ? `${yn(`entities.${i}.ctl.wish`, 'Is the trustee accustomed or obliged to act (or reasonably expected to act) in accordance with the wishes of the taxpayer and / or its affiliates?', { ref: '328-125(3)' })}
-            <div class="grid">${F('Highest % of income or capital distributions to taxpayer + affiliates in any of the 4 prior years', tpct(`entities.${i}.ctl.dist`))}</div>`
-            : `<div class="grid">${F('% of income, capital or voting rights held by taxpayer + affiliates (highest)', tpct(`entities.${i}.ctl.pct`))}</div>`}
+            <div class="grid">${F('Highest % of income or capital distributions to taxpayer + affiliates in any of the 4 prior years', tpct(`entities.${i}.ctl.dist`), 'income and capital tested separately')}</div>`
+            : `<div class="grid">${F('% held directly by the taxpayer', tpct(`entities.${i}.ctl.pct`), 'highest of income, capital or voting')}${F('% held by the taxpayer\'s affiliates', tpct(`entities.${i}.ctl.affPct`), 'incl. spouse / children under 18 (s152-47)')}</div>`}
+          <div class="grid" style="margin-top:8px">${F('Also held through another entity', tsel(`entities.${i}.ctl.via`, others), 'from this register')}${F('That entity\'s % in this entity', tpct(`entities.${i}.ctl.viaPct`))}</div>
           ${yn(`entities.${i}.ctl.comm`, 'If between 40% and 50%: has the Commissioner determined that another entity controls it?', { ref: '328-125(6)' })}
           ${x.type === 'individual' || x.type === 'company' ? yn(`entities.${i}.ctl.aff`, 'Does it act, or could it reasonably be expected to act, in accordance with the taxpayer\'s directions or wishes (or in concert) in its business affairs?', { ref: '328-130', hint: 'Only individuals and companies can be affiliates. Being a spouse, partner or co-director is not enough by itself.' }) : ''}
-          ${sg ? `<div class="res info"><b>Suggested: ${REL_NAME[sg.rel]}</b>${sg.t}${sg.rel !== x.rel ? ` <button type="button" class="btn small" data-act="userel" data-i="${i}" data-rel="${sg.rel}">Use this</button>` : ''}</div>` : ''}
-          <p class="muted" style="font-size:12px;margin:6px 0 0">Indirect control: if A controls B and B controls C, A controls C, even with an indirect interest under 40%. Exempt entities and DGRs are ignored for the distribution test.</p>
-        </details></div>`;
+          <div data-o="entSugg.${x.id}" data-f="html"></div>
+        </div>`;
     };
-    return `<div class="card"><h3>Connected entities &amp; affiliates</h3><p class="lead">List every entity connected with, or an affiliate of, the taxpayer. This register feeds the active asset test, the $6m net asset test and the turnover test, so it only needs to be entered once.</p>
+    return `<div class="card"><h3>Connected entities &amp; affiliates</h3><p class="lead">List every entity connected with, or an affiliate of, the taxpayer. Fill in the control check and the relationship is set automatically (you can still override it). This register feeds the active asset test, the $6m net asset test and the turnover test, so it only needs to be entered once. Enter each entity's <b>full</b> assets and turnover in those steps, not the taxpayer's share.</p>
     <label class="chk"><input type="checkbox" data-k="noEnts" ${S.noEnts ? 'checked' : ''}> The taxpayer has no connected entities or affiliates</label>
     <div style="margin-top:10px">${e.map(card).join('')}</div>
-    ${addBtn('entities', 'entity', 'Add connected entity or affiliate')}
+    ${addBtn('entities', 'entity', 'Add related entity')}
     <details class="more"><summary>Control rules (s328-125)</summary><ul style="margin:6px 0 0 18px;padding:0;font-size:12.5px;color:var(--muted)">
       <li>Connected: one entity controls the other, or both are controlled by the same third entity.</li>
-      <li>Control: the right to at least 40% of income or capital distributions, or (companies) 40% of voting power, held with affiliates.</li>
-      <li>Discretionary trust: controlled if the trustee acts on the entity's wishes, or the entity (with affiliates) received at least 40% of income or capital distributions in any of the 4 prior years. Income and capital are tested separately.</li>
-      <li>Spouse and children under 18 can be treated as affiliates for the active asset test, $6m test and turnover test (s152-47).</li></ul></details>
+      <li>Control: the right to at least 40% of income or capital distributions, or (companies) 40% of voting power, held by the taxpayer, its affiliates, or both together.</li>
+      <li>Holdings through another entity only count through a chain of control: if the taxpayer controls B and B controls A, the taxpayer controls A. A non-controlling stake in B adds nothing.</li>
+      <li>Discretionary trust: controlled if the trustee acts on the entity's wishes, or the entity (with affiliates) received at least 40% of income or capital distributions in any of the 4 prior years.</li>
+      <li>Connection dates: the $6m test only counts entities connected just before the CGT event; turnover only counts the part of the year an entity was connected; active use only counts while the user was connected.</li></ul></details>
     ${notes('entities')}</div>`;
 };
 
@@ -712,13 +797,13 @@ P.aat = () => {
 };
 
 P.mnav = () => {
-    const list = R.entList.filter(e => e.rel !== 'other');
+    const list = R.entList.filter(e => e.rel !== 'other' || inObjGroup(e));
     const card = e => {
         const base = e.id === 'tp' ? 'tpm' : `entities.${S.entities.findIndex(x => x.id === e.id)}`;
         const d = e.data, rr = R.ents[e.id];
         const isIndLike = e.type === 'individual';
         const treats = ASSET_TREAT.filter(([k]) => (isIndLike || !['home', 'personal', 'super'].includes(k)) && (e.rel === 'tp' || e.rel === 'connected' ? !['notbiz', 'affonly'].includes(k) : true));
-        return `<div class="ent${e.id === 'tp' ? ' tp' : ''}"><div class="eh"><b>${esc(e.name)}</b><span class="muted" style="font-size:12px">${e.rel === 'tp' ? 'Taxpayer' : REL_NAME[e.rel]} · ${TYPE_NAME[e.type] || e.type}</span></div>
+        return `<div class="ent${e.id === 'tp' ? ' tp' : ''}"><div class="eh"><b>${esc(e.name)}</b><span class="muted" style="font-size:12px">${e.rel === 'tp' ? 'Taxpayer' : REL_NAME[e.rel]} · ${TYPE_NAME[e.type] || e.type} ${entTag(e)}</span></div>
         <div class="tw"><table class="t"><thead><tr><th>CGT asset</th><th class="num">Market value</th><th>Treatment</th><th class="num">Counted</th><th></th></tr></thead><tbody>
         ${(d.assets || []).map((x, i) => `<tr><td>${tin(`${base}.assets.${i}.desc`)}</td><td style="width:140px">${tmon(`${base}.assets.${i}.mv`)}</td><td>${tsel(`${base}.assets.${i}.treat`, treats)}${x.treat === 'home' ? `<div style="margin-top:4px">${F('Income-producing use %', tpct(`${base}.assets.${i}.use`))}</div>` : ''}</td><td class="num">${o(`ents.${e.id}.a${i}`)}</td><td>${delBtn(`${base}.assets`, i)}</td></tr>`).join('')}
         </tbody></table></div>${addBtn(`${base}.assets`, 'asset', 'Add asset')}
@@ -732,28 +817,30 @@ P.mnav = () => {
       <li>Net value = market value of CGT assets less related liabilities, and provisions for annual leave, long service leave, unearned income and tax.</li>
       <li>Individuals: exclude personal use assets, superannuation, life insurance, and the main residence (except the proportion used to produce income).</li>
       <li>Exclude shares, units or other interests (except debt) in connected entities, to avoid double counting.</li>
-      <li>Connected entities: include the full net value, not just the taxpayer's share.</li>
+      <li>Connected entities: include the <b>full</b> net value, not just the taxpayer's share (e.g. 100% of a company the client owns 60% of).</li>
+      <li>Only entities connected (or affiliates) just before the CGT event count. Entities already sold out of are excluded.</li>
       <li>Affiliates and entities connected with them: only include assets used or held ready for use in the business of the taxpayer or an entity connected with it (not one connected only because of an affiliate).</li>
       <li>Keep evidence supporting the market values.</li></ul></details>
     ${list.length === 1 && !S.noEnts && !S.entities.length ? `<div class="banner">No connected entities or affiliates entered yet. Add them in the <a href="#" data-act="goto" data-step="entities">entities step</a>, or tick "no connected entities".</div>` : ''}
     <div style="margin-top:10px">${list.map(card).join('')}</div>
     <div class="tw"><table class="t"><thead><tr><th>Entity</th><th>Relationship</th><th class="num">Net value</th></tr></thead><tbody>
-    ${list.map(e => `<tr><td>${esc(e.name)}</td><td>${e.rel === 'tp' ? 'Taxpayer' : REL_NAME[e.rel]}</td><td class="num">${o(`ents.${e.id}.net`)}</td></tr>`).join('')}
+    ${list.filter(e => R.ents[e.id].counts || e.id === 'tp').map(e => `<tr><td>${esc(e.name)}</td><td>${e.rel === 'tp' ? 'Taxpayer' : REL_NAME[e.rel]}</td><td class="num">${o(`ents.${e.id}.net`)}</td></tr>`).join('')}
     <tr class="tot"><td colspan="2">Total net value</td><td class="num">${o('mnavTotal')}</td></tr></tbody></table></div>
     <div data-o="mnavRes" data-f="html"></div>
     ${notes('mnav')}</div>`;
 };
 
 P.sbe = () => {
-    const list = R.entList.filter(e => ['tp', 'connected', 'affiliate', 'spouse'].includes(e.rel));
+    const list = R.entList.filter(e => ['tp', 'connected', 'affiliate', 'spouse'].includes(e.rel) || inObjGroup(e));
+    const part = e => { const rr = R.ents[e.id]; const t = []; if (e.id !== 'tp' && rr.relT !== false) { if (!rr.inP && e.rel !== 'other') t.push('not connected in prior year – excluded'); else if (rr.partP) t.push('prior year: connected part of year only'); if (!rr.inC && e.rel !== 'other') t.push('not connected in current year – excluded'); else if (rr.partC) t.push('current year: connected part of year only'); } return t.length ? `<div style="font-size:11px;color:var(--amber)">${t.join(' · ')}</div>` : ''; };
     const base = e => e.id === 'tp' ? 'tpm' : `entities.${S.entities.findIndex(x => x.id === e.id)}`;
     return `<div class="card"><h3>CGT small business entity (turnover test)</h3><p class="lead">The taxpayer must carry on a business and have aggregated turnover under <b>${money(R.T.sbe)}</b>. Aggregated turnover = annual turnover of the taxpayer plus its connected entities and affiliates, less dealings between them.${R.T.red !== R.T.sbe ? ` From FY2028 a <b>${money(R.T.red)}</b> threshold applies for the 50% active asset reduction only.` : ''}</p>
     ${yn('tp.business', 'Is the taxpayer carrying on a business?', { ref: '328-110', hint: 'If not, it can\'t be a CGT small business entity. Check the passive-asset routes in the Basic conditions step.' })}
     ${R.post2018 && R.equity ? `<div class="res info"><b>Shares / trust interests (events from 8 Feb 2018)</b>The turnover test can only be used if the taxpayer was carrying on a business just before the CGT event.</div>` : ''}
     <h4>Annual turnover by entity</h4>
-    <p class="muted" style="font-size:12.5px">Ordinary income in the course of business (gross, not profit). Exclude retail fuel sales and GST. Deduct dealings with the taxpayer, connected entities and affiliates, and income earned while an entity was not connected or an affiliate. Annualise part-year businesses.</p>
+    <p class="muted" style="font-size:12.5px">Ordinary income in the course of business (gross, not profit). Exclude retail fuel sales and GST. Enter each entity's <b>full</b> turnover, not the taxpayer's share. Deduct dealings with the taxpayer, connected entities and affiliates. Where an entity was only connected for part of a year (see connection dates in the register), enter only the turnover earned while it was connected. Annualise part-year businesses.</p>
     <div class="tw"><table class="t"><thead><tr><th>Entity</th><th class="num">Prior year turnover</th><th class="num">Less group dealings</th><th class="num">Current year turnover</th><th class="num">Less group dealings</th></tr></thead><tbody>
-    ${list.map(e => `<tr><td><b>${esc(e.name)}</b><div class="muted" style="font-size:11px">${e.rel === 'tp' ? 'Taxpayer' : REL_NAME[e.rel]}</div></td><td>${tmon(`${base(e)}.to.prior`)}</td><td>${tmon(`${base(e)}.to.dPrior`)}</td><td>${tmon(`${base(e)}.to.cur`)}</td><td>${tmon(`${base(e)}.to.dCur`)}</td></tr>`).join('')}
+    ${list.map(e => `<tr><td><b>${esc(e.name)}</b><div class="muted" style="font-size:11px">${e.rel === 'tp' ? 'Taxpayer' : REL_NAME[e.rel]} ${entTag(e)}</div>${part(e)}</td><td>${tmon(`${base(e)}.to.prior`)}</td><td>${tmon(`${base(e)}.to.dPrior`)}</td><td>${tmon(`${base(e)}.to.cur`)}</td><td>${tmon(`${base(e)}.to.dCur`)}</td></tr>`).join('')}
     <tr class="tot"><td>Aggregated turnover</td><td class="num" colspan="2">${o('toPrior')}</td><td class="num" colspan="2">${o('toCur')}</td></tr></tbody></table></div>
     <div class="grid" style="margin-top:10px">${F('Aggregated turnover 2 years before', tmon('sbe.y2'), 'only needed for the "likely" test')}${F('Likely current-year turnover (as at start of year)', tmon('sbe.likely'))}</div>
     <h4>Test result</h4>
@@ -765,47 +852,69 @@ P.people = () => {
     if (!R.needPeople) return `<div class="card"><h3>Significant individuals &amp; stakeholders</h3>${res('na', 'Not needed', 'The taxpayer is an individual selling an asset other than shares or a trust interest. Significant individual and stakeholder tests don\'t apply.')}${notes('people')}</div>`;
     const tpCols = R.isEntity, obCols = R.equity;
     const tpIsCo = R.isCo, obIsCo = R.objType === 'company';
-    const rights = (pre, isCo, i) => `<div class="grid" style="grid-template-columns:repeat(${isCo ? 4 : 3},minmax(80px,1fr));gap:6px">${isCo ? F('Voting %', tpct(`people.${i}.${pre}V`)) : ''}${F(isCo ? 'Dividend %' : 'Income %', tpct(`people.${i}.${pre}D`))}${F('Capital %', tpct(`people.${i}.${pre}C`))}${F('Indirect %', tpct(`people.${i}.${pre}I`))}</div>`;
-    const cards = S.people.map((p, i) => {
-        const rr = R.people[p.id] || {};
-        return `<div class="ent${p.isTp ? ' tp' : ''}"><div class="eh"><b>${esc(p.name || 'Individual ' + (i + 1))}${p.isTp ? ' (taxpayer)' : ''}</b>${p.isTp ? '' : delBtn('people', i)}</div>
-        <div class="grid">${F('Name', tin(`people.${i}.name`))}${F('Date of birth', tdate(`people.${i}.dob`))}${F('Spouse of', tsel(`people.${i}.spouseOf`, [['', '—']].concat(S.people.filter(x => x.id !== p.id).map(x => [String(x.id), x.name || 'Unnamed']))))}</div>
-        ${tpCols ? `<h4>Small business participation in the taxpayer (${esc(S.tp.name || TYPE_NAME[S.tp.type])})</h4>${rights('tp', tpIsCo, i)}
-          <div style="font-size:12.5px;margin-top:4px">Participation: <b>${rr.tpPart != null ? pct(rr.tpPart, 2) : '—'}</b> · ${badge(rr.siTp ? 'pass' : 'na', rr.siTp ? 'Significant individual' : 'Not significant')} ${rr.stTp ? badge('pass', 'CGT concession stakeholder') : ''}</div>` : ''}
-        ${obCols ? `<h4>Participation in the object ${R.objType === 'company' ? 'company' : 'trust'} (the shares / interest sold)</h4>${rights('ob', obIsCo, i)}
-          <div style="font-size:12.5px;margin-top:4px">Participation: <b>${rr.obPart != null ? pct(rr.obPart, 2) : '—'}</b> · ${badge(rr.siOb ? 'pass' : 'na', rr.siOb ? 'Significant individual' : 'Not significant')} ${rr.stOb ? badge('pass', 'CGT concession stakeholder') : ''}</div>` : ''}
-        </div>`;
-    }).join('');
+    const entName = S.tp.name || TYPE_NAME[S.tp.type];
+    const objName = (S.entities.find(e => String(e.id) === String(S.shr.objEnt)) || {}).name || (R.objType === 'company' ? 'the company sold' : 'the trust sold');
+    const block = (pre, isCo, i, p, label, target) => {
+        const rows = p[pre + 'Ind'] || [];
+        return `<h4>${label}</h4>
+        <div class="grid" style="grid-template-columns:repeat(${isCo ? 3 : 2},minmax(90px,1fr));gap:6px">${isCo ? F('Voting %', tpct(`people.${i}.${pre}V`)) : ''}${F(isCo ? 'Dividend %' : (pre === 'tp' ? R.isDT : R.objType === 'dtrust') ? 'Income distributed %' : 'Income %', tpct(`people.${i}.${pre}D`))}${F((pre === 'tp' ? R.isDT : R.objType === 'dtrust') ? 'Capital distributed %' : 'Capital %', tpct(`people.${i}.${pre}C`))}</div>
+        <div style="margin-top:8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Held indirectly through other companies / trusts</div>
+        ${rows.length ? `<div class="tw"><table class="t"><thead><tr><th>Through (interposed entity)</th><th class="num">Individual's % in it</th><th class="num">Its % in ${esc(target)}</th><th class="num">Indirect</th><th></th></tr></thead><tbody>
+          ${rows.map((x, j) => `<tr><td><input type="text" data-k="people.${i}.${pre}Ind.${j}.via" value="${esc(x.via)}" placeholder="Interposed company or trust" list="sbc-entlist"></td><td style="width:110px">${tpct(`people.${i}.${pre}Ind.${j}.a`)}</td><td style="width:110px">${tpct(`people.${i}.${pre}Ind.${j}.b`)}</td><td class="num"><span data-o="pind.${p.id}.${pre}.${j}" data-f="html"></span></td><td>${delBtn(`people.${i}.${pre}Ind`, j)}</td></tr>`).join('')}
+          </tbody></table></div>` : ''}
+        ${has(p[pre + 'I']) ? `<div class="grid" style="margin-top:6px">${F('Indirect % entered previously', tpct(`people.${i}.${pre}I`))}</div>` : ''}
+        <button type="button" class="btn small" style="margin-top:6px" data-act="add" data-path="people.${i}.${pre}Ind" data-tpl="ind">${icon('plus')} Add indirect holding</button>
+        <div style="font-size:12.5px;margin-top:8px" data-o="pstat.${p.id}.${pre}" data-f="html"></div>`;
+    };
+    const cards = S.people.map((p, i) => `<div class="ent${p.isTp ? ' tp' : ''}"><div class="eh"><b><span data-o="pname.${p.id}" data-f="text"></span>${p.isTp ? ' (taxpayer)' : ''}</b>${p.isTp ? '' : delBtn('people', i)}</div>
+        <div class="grid">${F('Name', tin(`people.${i}.name`))}${F('Date of birth', tdate(`people.${i}.dob`))}${F('Spouse of', tsel(`people.${i}.spouseOf`, [['', '—']].concat(S.people.filter(x => x.id !== p.id).map(x => [String(x.id), x.name || 'Unnamed']))), 'spouse of a significant individual can be a stakeholder')}</div>
+        ${tpCols ? block('tp', tpIsCo, i, p, `Participation in the taxpayer (${esc(entName)})`, entName) : ''}
+        ${obCols ? block('ob', obIsCo, i, p, `Participation in ${esc(objName)} (the shares / interest sold)`, objName) : ''}
+        </div>`).join('');
     return `<div class="card"><h3>Significant individuals &amp; CGT concession stakeholders</h3>
-    <p class="lead">Significant individual: small business participation percentage of at least 20% (direct + indirect). Direct participation is the <b>smallest</b> of the voting, dividend (income) and capital entitlements. For discretionary trusts, use the distributions for the year (or the last year one was made). CGT concession stakeholder: a significant individual, or the spouse of one who has a participation percentage above zero.</p>
-    ${obCols ? `<div class="grid">${F('Object entity type', tsel('objType', [['company', 'Company'], ['fixed', 'Unit / fixed trust'], ['dtrust', 'Discretionary trust']]))}</div>` : ''}
+    <p class="lead">Significant individual: small business participation of at least 20%, direct plus indirect (s152-55). Direct participation is the <b>smallest</b> of the voting, dividend (income) and capital entitlements. Indirect holdings are traced through every interposed company or trust, whether or not it is controlled (s152-70). CGT concession stakeholder: a significant individual, or the spouse of one with a participation above 0% (s152-60).</p>
+    <datalist id="sbc-entlist">${S.entities.map(e => `<option value="${esc(e.name)}">`).join('')}</datalist>
+    ${obCols ? `<div class="grid">${F('Type of entity sold', tsel('objType', [['company', 'Company'], ['fixed', 'Unit / fixed trust'], ['dtrust', 'Discretionary trust']]))}</div>` : ''}
     <div style="margin-top:10px">${cards}</div>
     ${addBtn('people', 'person', 'Add individual')}
-    <p class="muted" style="font-size:12px">Indirect %: the individual's participation in an interposed entity × that entity's participation in this company / trust. Insert 100% voting where shares are held jointly. Check the constitution or trust deed for different share or unit classes.</p>
-    ${obCols ? (R.isInd ? res(R.stakeS, R.stakeS === 'pass' ? 'Taxpayer is a CGT concession stakeholder' : R.stakeS === 'fail' ? 'Taxpayer is not a CGT concession stakeholder' : 'Enter the taxpayer\'s participation in the object entity', R.stakeWhy || '')
-      : res(R.stakeS, R.stakeS === 'pass' ? '90% test satisfied' : R.stakeS === 'fail' ? '90% test not satisfied' : 'Add the individuals', R.stakeWhy || '')) : ''}
-    ${tpCols ? res(R.siTpAny ? 'pass' : 'warn', R.siTpAny ? 'The taxpayer has at least one significant individual' : 'No significant individual of the taxpayer identified', 'Needed for the 15 year exemption and the retirement exemption.') : ''}
+    <div data-o="pTotRes" data-f="html"></div>
+    <p class="muted" style="font-size:12px">For discretionary trusts, use the distributions for the year (or the last year one was made). Insert 100% voting where shares are held jointly. Check the constitution or trust deed for different share or unit classes.</p>
+    <div data-o="pResult" data-f="html"></div>
     ${notes('people')}</div>`;
 };
+
+// Where each basic condition is worked out (step, optional anchor on that page)
+const GO = { B1: ['asset'], B2: ['gain'], B3: ['asset'], B4: ['aat'], B5: ['mnav'], C1: ['people'], 'C2.1': ['basic', 'sbc-c21'], 'C2.2': ['basic', 'sbc-c22'], P1: ['basic', 'sbc-p1'] };
+const goAttrs = k => { const g = GO[k] || ['basic']; return `data-act="goto" data-step="${g[0]}"${g[1] ? ` data-anchor="${g[1]}"` : ''}`; };
+const ROUTE_GO = [['mnav'], ['sbe'], ['basic', 'sbc-routes'], ['basic', 'sbc-routes'], ['basic', 'sbc-routes']];
 
 P.basic = () => {
     const shr = R.equity && R.post2018;
     const routeOpen = R.mnavPass !== true && R.sbe.s !== 'pass';
-    return `<div class="card"><h3>Basic conditions</h3><p class="lead">Every basic condition must be met to apply any of the four concessions (s152-10).</p>
+    const ot = R.objTest || {};
+    const objOpts = [['', 'Not in the register – enter figures below']].concat(S.entities.map(e => [String(e.id), e.name || 'Unnamed entity']));
+    return `<div class="card"><h3>Basic conditions</h3><p class="lead">Every basic condition must be met to apply any of the four concessions (s152-10). Click a condition to go to where it is worked out.</p>
     <div class="tw"><table class="t"><thead><tr><th></th><th>Condition</th><th class="num">Result</th></tr></thead><tbody>
-    ${R.basicItems.map(x => `<tr><td style="width:44px"><b>${x.k}</b></td><td>${x.t} <span class="muted" style="font-size:11px">s${x.ref}</span></td><td class="num">${badge(x.s)}</td></tr>`).join('')}</tbody></table></div>
-    <h4>Size / entity tests (B5 – at least one)</h4>
-    ${checks(R.routes)}
+    ${R.basicItems.map(x => `<tr class="go" ${goAttrs(x.k)}><td style="width:44px"><b>${x.k}</b></td><td>${x.t} <span class="muted" style="font-size:11px">s${x.ref}</span></td><td class="num">${badge(x.s)} <span class="muted">›</span></td></tr>`).join('')}</tbody></table></div>
+    <h4 id="sbc-routes">Size / entity tests (B5 – at least one)</h4>
+    <table class="t"><tbody>${R.routes.map((x, i) => `<tr class="go" data-act="goto" data-step="${ROUTE_GO[i][0]}"${ROUTE_GO[i][1] ? ` data-anchor="${ROUTE_GO[i][1]}"` : ''}><td>${x.t} <span class="muted" style="font-size:11px">s${x.ref}</span></td><td class="num">${badge(x.s)} <span class="muted">›</span></td></tr>`).join('')}</tbody></table>
     <details class="more"${routeOpen ? ' open' : ''}><summary>Passive asset and partnership routes</summary>
       ${S.tp.partner === 'yes' || S.tp.type === 'individual' || S.tp.type === 'company' ? yn('alt.partnerAsset', 'Is the taxpayer a partner in a partnership that is a CGT small business entity, and the asset an interest in a partnership asset?', { ref: '152-10(1)(c)(iii)', na: true }) : ''}
       ${yn('alt.passive', 'Does the taxpayer not carry on a business (other than in partnership), with the asset used in a business of an affiliate or connected entity that is a CGT small business entity?', { ref: '152-10(1A)', na: true, hint: 'Test the business entity\'s aggregated turnover as if the taxpayer were its affiliate or connected entity.' })}
       ${yn('alt.partnerPassive', 'Is the taxpayer a partner in a CGT SBE partnership, with the asset (not a partnership asset) used in the partnership business, and no other business carried on?', { ref: '152-10(1B)', na: true })}
     </details>
-    ${shr ? `<h4>Shares or trust interests – extra conditions (events from 8 Feb 2018)</h4>
-      ${R.mnavPass !== true ? yn('shr.bizBefore', 'Relying on the turnover test: was the taxpayer carrying on a business just before the CGT event?', { ref: '152-10(2)(c)' }) : ''}
-      <p class="muted" style="font-size:12.5px">Test the object company / trust on its own figures: include only that entity, its affiliates and entities it controls (using a 20% control threshold).</p>
-      <div class="grid">${F('Object group net asset value', tmon('shr.objNet'), `must be ≤ ${money(R.T.mnav)}`)}${F('Object group aggregated turnover', tmon('shr.objTurn'), `must be < ${money(R.T.sbe)}`)}</div>` : ''}
-    ${S.asset.kind === 'partnership' ? yn('shr.membership', 'Is the right or interest in partnership income / capital a membership interest (the entity is, or becomes, a partner)?', { ref: '152-10(2C)', hint: 'Assignments of income or capital only (e.g. Everett assignments) on or after 8 May 2018 don\'t qualify.' }) : ''}
+    ${shr ? `<h4 id="sbc-c21">C2.1 – Carrying on a business (shares / trust interests, events from 8 Feb 2018)</h4>
+      ${R.mnavPass !== true ? yn('shr.bizBefore', 'Relying on the turnover test: was the taxpayer carrying on a business just before the CGT event?', { ref: '152-10(2)(c)' }) : `<p class="muted" style="font-size:12.5px">Not needed: the taxpayer passes the $6m net asset test.</p>`}
+      <h4 id="sbc-c22">C2.2 – The company / trust being sold</h4>
+      <p class="muted" style="font-size:12.5px">The company or trust whose shares or interests were sold must itself pass the $6m net asset test or be a CGT small business entity. Test it on its own group only: that entity, its affiliates and entities it controls using a <b>20%</b> control threshold (not the taxpayer's other entities).</p>
+      <div class="grid">${F('Company / trust being sold', tsel('shr.objEnt', objOpts), 'pick it from the entities register')}</div>
+      ${has(S.shr.objEnt) ? `<p style="font-size:12.5px;margin:8px 0">Group from the register: <b>${esc((ot.grp || []).join(', ') || '—')}</b>. Tick "in the group of the company / trust being sold" on any other entity in the <a href="#" data-act="goto" data-step="entities">register</a> that belongs to it. Enter their assets on the <a href="#" data-act="goto" data-step="mnav">$6m page</a> and turnover on the <a href="#" data-act="goto" data-step="sbe">turnover page</a>.</p>` : ''}
+      <table class="calc"><tr><td>Group net asset value ${ot.netV != null ? `<span class="muted" style="font-size:11px">(${ot.netSrc})</span>` : ''}</td><td>${ot.netV != null ? money(ot.netV) + ' ' + badge(ot.on ? 'pass' : 'fail', ot.on ? '≤ ' + money(R.T.mnav) : 'over') : '—'}</td></tr>
+        <tr><td>Group aggregated turnover ${ot.turnV != null ? `<span class="muted" style="font-size:11px">(${ot.turnSrc})</span>` : ''}</td><td>${ot.turnV != null ? money(ot.turnV) + ' ' + badge(ot.ot ? 'pass' : 'fail', ot.ot ? '< ' + money(R.T.sbe) : 'over') : '—'}</td></tr></table>
+      <details class="more"${has(S.shr.objNet) || has(S.shr.objTurn) ? ' open' : ''}><summary>Enter the figures directly instead (overrides the register)</summary>
+        <div class="grid" style="margin-top:8px">${F('Group net asset value', tmon('shr.objNet', 'from register'), `must be ≤ ${money(R.T.mnav)}`)}${F('Group aggregated turnover', tmon('shr.objTurn', 'from register'), `must be < ${money(R.T.sbe)}`)}</div></details>
+      ${res(ot.s || 'inc', ot.s === 'pass' ? 'C2.2 satisfied' : ot.s === 'fail' ? 'C2.2 not satisfied: the company / trust being sold fails both tests' : 'C2.2 incomplete: choose the company / trust being sold, or enter its figures')}` : ''}
+    ${S.asset.kind === 'partnership' ? `<div id="sbc-p1">${yn('shr.membership', 'Is the right or interest in partnership income / capital a membership interest (the entity is, or becomes, a partner)?', { ref: '152-10(2C)', hint: 'Assignments of income or capital only (e.g. Everett assignments) on or after 8 May 2018 don\'t qualify.' })}</div>` : ''}
     ${res(R.basicS, R.basicS === 'pass' ? (R.viaEstate ? 'Basic conditions met through the deceased estate rules' : 'Basic conditions satisfied') : R.basicS === 'fail' ? 'Basic conditions not satisfied' : 'Some conditions are incomplete', R.basicS === 'pass' ? 'At least some concessions can apply. Continue to the 15 year exemption.' : '')}
     ${R.basicS === 'fail' || R.viaEstate ? `<h4>Deceased estate (s152-80)</h4>
       ${yn('dec.deceased', 'Was the asset owned by a deceased individual (estate asset, or passed to a surviving joint tenant)?')}
@@ -959,7 +1068,7 @@ function renderSide() {
       ${R.f15 ? line('15 year exemption', W.f15, 1) : line('Capital losses', W.lossUsed, 1) + line('CGT discount', W.disc, 1) + line('50% reduction', W.red, 1) + line('Retirement exemption', W.ret, 1) + line('Roll-over', W.roll, 1)}
       <div style="margin-top:10px"><div class="muted" style="font-size:11px;text-transform:uppercase;font-weight:800;letter-spacing:.5px">Net capital gain</div><div class="big">${money(W.net)}</div></div></div>
       <div class="card"><h5>Basic conditions</h5>
-      ${R.basicItems.map(x => `<div class="bc"><span>${x.k} ${x.t.length > 46 ? x.t.slice(0, 44) + '…' : x.t}</span>${badge(x.s)}</div>`).join('')}
+      ${R.basicItems.map(x => `<div class="bc go" ${goAttrs(x.k)} title="Go to this test"><span>${x.k} ${x.t.length > 46 ? x.t.slice(0, 44) + '…' : x.t}</span>${badge(x.s)}</div>`).join('')}
       <div style="margin-top:8px">${badge(R.basicS, R.basicS === 'pass' ? 'Basic conditions met' : R.basicS === 'fail' ? 'Not met' : 'Incomplete')}</div></div>
       <div class="card"><h5>Thresholds – ${esc(R.fyName)}</h5>
       <div class="bc"><span>Net asset value</span><b>${money(R.T.mnav)}</b></div><div class="bc"><span>CGT SBE turnover</span><b>${money(R.T.sbe)}</b></div>${R.T.red !== R.T.sbe ? `<div class="bc"><span>50% reduction turnover</span><b>${money(R.T.red)}</b></div>` : ''}<div class="bc"><span>Retirement limit</span><b>${money(R.T.ret)}</b></div><div class="bc"><span>CGT cap</span><b>${R.rt.cgtCap ? money(R.rt.cgtCap) : 'TBA'}</b></div></div>`;
@@ -977,15 +1086,59 @@ function fillOutputs() {
     const root = ROOT();
     // per-asset counted values
     R.entList.forEach(e => (e.data.assets || []).forEach((x, i) => { const mv = num(x.mv); R.ents[e.id]['a' + i] = x.treat === 'inc' ? mv : x.treat === 'home' ? mv * Math.min(Math.max(num(x.use), 0), 100) / 100 : 0; }));
+    R.gainRes = res(R.gainS, R.gainS === 'pass' ? 'Capital gain arises' : R.gainS === 'fail' ? (R.loss > 0 ? `Capital loss of ${money(R.loss)}: the concessions do not apply` : 'No capital gain: the concessions do not apply') : 'Enter capital proceeds and cost base');
+    root.querySelectorAll('.rcbcol').forEach(el => el.classList.toggle('hidden', !(R.gainEntered && R.diff < 0)));
     R.mnavRes = R.mnavPass == null ? res('inc', 'Enter asset values') : res(R.mnavPass ? 'pass' : 'fail', R.mnavPass ? `Maximum net asset value test passed: ${money(R.mnavTotal)} ≤ ${money(R.T.mnav)}` : `Maximum net asset value test failed: ${money(R.mnavTotal)} exceeds ${money(R.T.mnav)}`, !R.mnavPass ? (R.sbePass ? 'The turnover test is passed, so the basic conditions can still be met.' : 'Check the turnover test or the passive asset routes.') : '');
     const sbeBlock = (x, T, lbl) => checks(x.steps) + res(x.s, x.s === 'pass' ? `${lbl}: CGT small business entity (${x.why.toLowerCase()})` : x.s === 'fail' ? `${lbl}: not a CGT small business entity` : `${lbl}: incomplete`, '');
     R.sbeRes = sbeBlock(R.sbe, R.T.sbe, money(R.T.sbe) + ' test') + (R.T.red !== R.T.sbe ? sbeBlock(R.sbe10, R.T.red, money(R.T.red) + ' test (50% reduction only)') : '');
+    // --- significant individuals: live names, participation and status
+    R.pname = {}; R.pstat = {}; R.pind = {};
+    S.people.forEach((p, i) => {
+        const rr = R.people[p.id] || {};
+        R.pname[p.id] = p.name || 'Individual ' + (i + 1);
+        R.pstat[p.id] = {}; R.pind[p.id] = {};
+        ['tp', 'ob'].forEach(pre => {
+            const d = rr[pre + 'D'] || {}, part = rr[pre + 'Part'], si = rr['si' + (pre === 'tp' ? 'Tp' : 'Ob')], st = rr['st' + (pre === 'tp' ? 'Tp' : 'Ob')];
+            R.pind[p.id][pre] = {};
+            (p[pre + 'Ind'] || []).forEach((x, j) => { R.pind[p.id][pre][j] = has(x.a) && has(x.b) ? pct(num(x.a) * num(x.b) / 10000, 2) : '—'; });
+            const sp = S.people.find(x => String(x.id) === String(p.spouseOf));
+            const spNote = !si && st && sp ? ` (spouse of ${esc(sp.name || 'a significant individual')})` : '';
+            R.pstat[p.id][pre] = d.err ? `<span class="badge fail">Check</span> <b style="color:var(--red)">${d.err}</b>`
+                : part == null ? '<span class="muted">Enter holdings to calculate participation.</span>'
+                : `Direct <b>${pct(d.direct, 2)}</b> + indirect <b>${pct(d.ind, 2)}</b> = participation <b>${pct(part, 2)}</b> · ${badge(si ? 'pass' : 'na', si ? 'Significant individual' : 'Not significant (under 20%)')} ${st ? badge('pass', 'CGT concession stakeholder') + spNote : ''}`;
+        });
+    });
+    const totNote = (t, label) => { const w = []; if (t.D > 100.0001) w.push(`dividend / income entitlements total ${t.D}%`); if (t.C > 100.0001) w.push(`capital entitlements total ${t.C}%`); const v = t.V > 100.0001 ? ` Voting totals ${t.V}%, which is only possible where shares are held jointly (each joint holder counts 100%).` : ''; return w.length ? res('warn', `${label}: ${w.join(' and ')}, more than 100%`, 'Direct entitlements of all individuals can\'t add up to more than 100%. Check the figures.' + v) : v ? res('info', label, v.trim()) : ''; };
+    R.pTotRes = (R.isEntity ? totNote(R.pTot.tp, 'Taxpayer') : '') + (R.equity ? totNote(R.pTot.ob, 'Entity sold') : '');
+    R.pResult = !R.needPeople ? '' : (R.equity ? (R.isInd ? res(R.stakeS, R.stakeS === 'pass' ? 'Taxpayer is a CGT concession stakeholder' : R.stakeS === 'fail' ? 'Taxpayer is not a CGT concession stakeholder' : 'Enter the taxpayer\'s participation in the entity sold', R.stakeWhy || '')
+        : res(R.stakeS, R.stakeS === 'pass' ? '90% test satisfied' : R.stakeS === 'fail' ? '90% test not satisfied' : 'Add the individuals', R.stakeWhy || '')) : '')
+        + (R.isEntity ? res(R.siTpAny ? 'pass' : 'warn', R.siTpAny ? 'The taxpayer has at least one significant individual' : 'No significant individual of the taxpayer identified', 'Needed for the 15 year exemption and the retirement exemption.') : '');
+    // --- entities: live names and control check result
+    R.entName = {}; R.entSugg = {};
+    S.entities.forEach((e, i) => {
+        R.entName[e.id] = e.name || 'Entity ' + (i + 1);
+        const sg = ctlSuggest(e);
+        R.entSugg[e.id] = (sg && sg.rel ? `<div class="res info"><b>${e.relAuto ? 'Relationship set to' : 'Control check suggests'}: ${REL_NAME[sg.rel]}</b>${sg.t}${!e.relAuto && sg.rel !== e.rel ? ` <button type="button" class="btn small" data-act="relauto" data-i="${i}">Use control check</button>` : ''}</div>` : '')
+            + (sg && sg.warn ? `<div class="res warn"><b>Indirect holding doesn't count toward control</b>${sg.warn}</div>` : '');
+    });
+    // --- keep dropdowns in step with names typed elsewhere
+    const syncSel = (sel, opts) => { const cur = sel.value; sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join(''); sel.value = opts.some(x => String(x[0]) === cur) ? cur : ''; };
+    root.querySelectorAll('select[data-k]').forEach(sel => {
+        const k = sel.getAttribute('data-k');
+        let m;
+        if ((m = /^people\.(\d+)\.spouseOf$/.exec(k))) { const me = S.people[+m[1]]; if (me) syncSel(sel, [['', '—']].concat(S.people.filter(x => x.id !== me.id).map(x => [String(x.id), x.name || 'Unnamed']))); }
+        else if ((m = /^entities\.(\d+)\.ctl\.via$/.exec(k))) { const me = S.entities[+m[1]]; if (me) syncSel(sel, [['', '—']].concat(S.entities.filter(x => x.id !== me.id).map(x => [String(x.id), x.name || 'Unnamed entity']))); }
+        else if (/^aat\.periods\.\d+\.user$/.test(k)) syncSel(sel, [['tp', S.tp.name || 'Taxpayer']].concat(S.entities.map(e => [String(e.id), e.name || 'Unnamed entity'])));
+        else if (k === 'shr.objEnt') syncSel(sel, [['', 'Not in the register – enter figures below']].concat(S.entities.map(e => [String(e.id), e.name || 'Unnamed entity'])));
+        else if ((m = /^entities\.(\d+)\.rel$/.exec(k))) { const me = S.entities[+m[1]]; if (me && sel.value !== me.rel) sel.value = me.rel; }
+    });
     root.querySelectorAll('[data-o]').forEach(el => {
         const k = el.getAttribute('data-o'), f = el.getAttribute('data-f');
         const v = k.split('.').reduce((o, kk) => (o == null ? undefined : o[kk]), R);
         if (f === 'html') el.innerHTML = v || '';
         else if (f === 'money-in') el.value = money(v || 0);
         else if (f === 'text-in') el.value = v == null ? '' : v;
+        else if (f === 'text') el.textContent = v == null ? '' : v;
         else el.textContent = f === 'pct' ? pct(v) : money(v || 0);
     });
 }
@@ -1008,7 +1161,7 @@ function report() {
       <table><tbody><tr><td>Capital proceeds</td><td class="n">${money(R.proceeds)}</td></tr><tr><td>Cost base</td><td class="n">${money(R.cb)}</td></tr><tr class="tot"><td>Gross capital gain</td><td class="n">${money(R.gross)}</td></tr>${R.loss ? `<tr><td>Capital loss (reduced cost base ${money(R.rcb)})</td><td class="n">${money(R.loss)}</td></tr>` : ''}<tr><td>Capital losses available</td><td class="n">${money(R.lossAvail)}</td></tr></tbody></table></div>${note('gain')}`;
     h += `<h2>3. CGT discount</h2>${R.isCo ? '<p>Not available to companies (s115-10).</p>' : tbl(R.discItems) + `<p>Discount percentage applied: <b>${pct(R.discPct, 2)}</b>${R.discOverride ? ' (override)' : ''}${R.discFactor ? ` – foreign / temporary resident days after 8 May 2012: ${R.discFactor.inel.toLocaleString()}` : ''}.</p>`}${note('discount')}`;
     const ents = R.entList.filter(e => e.id !== 'tp');
-    h += `<h2>4. Connected entities and affiliates</h2>${ents.length ? `<table><thead><tr><th>Entity</th><th>Type</th><th>Relationship</th></tr></thead><tbody>${ents.map(e => `<tr><td>${esc(e.name)}</td><td>${TYPE_NAME[e.type] || e.type}</td><td>${REL_NAME[e.rel]}</td></tr>`).join('')}</tbody></table>` : `<p>${S.noEnts ? 'The taxpayer has no connected entities or affiliates.' : 'None recorded.'}</p>`}${note('entities')}`;
+    h += `<h2>4. Connected entities and affiliates</h2>${ents.length ? `<table><thead><tr><th>Entity</th><th>Type</th><th>Relationship</th><th>Period</th><th>Basis</th></tr></thead><tbody>${ents.map(e => { const sg = ctlSuggest(e.data); const d = e.data; return `<tr><td>${esc(e.name)}</td><td>${TYPE_NAME[e.type] || e.type}</td><td>${REL_NAME[e.rel]}${d.relAuto === false ? ' (set by hand)' : ''}${inObjGroup(e) ? '<br><span style="color:#6b7280">C2.2 group</span>' : ''}</td><td>${d.connFrom || d.connTo ? `${d.connFrom ? fdate(D(d.connFrom)) : 'throughout'} – ${d.connTo ? fdate(D(d.connTo)) : 'event'}` : 'Throughout'}</td><td>${sg && sg.t ? sg.t : ''}${sg && sg.warn ? '<br>' + sg.warn : ''}</td></tr>`; }).join('')}</tbody></table>` : `<p>${S.noEnts ? 'The taxpayer has no connected entities or affiliates.' : 'None recorded.'}</p>`}${note('entities')}`;
     h += `<h2>5. Active asset test (s152-35)</h2>${a.event !== 'D1' ? kv([['Relevant period', `${fdate(R.start)} – ${fdate(R.relEnd)} (${R.relDays.toLocaleString()} days)${yes(S.aat.ceased) ? ' – business ceased' : ''}`], ['Days active', R.activeDays.toLocaleString()], ['Days required', `${R.needDays.toLocaleString()} (${R.longHold ? '7½ years' : 'half the period'})`]]) : ''}
       ${S.aat.periods.length ? `<table><thead><tr><th>Active from</th><th>To</th><th>Used in business of</th><th>Notes</th></tr></thead><tbody>${S.aat.periods.map(p => `<tr><td>${fdate(D(p.from))}</td><td>${fdate(D(p.to))}</td><td>${p.user === 'tp' ? esc(tp.name || 'Taxpayer') : esc((S.entities.find(e => String(e.id) === String(p.user)) || {}).name || '')}</td><td>${esc(p.note)}</td></tr>`).join('')}</tbody></table>` : ''}
       ${R.equity && S.aat.bs.length ? `<h3>80% test</h3><table><thead><tr><th>Item</th><th>Category</th><th class="n">Market value</th></tr></thead><tbody>${S.aat.bs.map(b => `<tr><td>${esc(b.desc)}</td><td>${BS_NAME[b.cat]}${b.cat === 'cashConn' && b.purpose ? ' – acquired to pass test (excluded)' : ''}${b.cat === 'sub' && has(b.subTotal) ? ` – look-through ${num(b.subPct)}% of ${money(num(b.subActive))} active / ${money(num(b.subTotal))} total` : ''}</td><td class="n">${money(num(b.mv))}</td></tr>`).join('')}<tr class="tot"><td colspan="2">Active / total (${R.e80 && R.e80.pct != null ? pct(R.e80.pct, 1) : '—'})</td><td class="n">${R.e80 ? money(R.e80.nmr) + ' / ' + money(R.e80.den) : ''}</td></tr></tbody></table>` : ''}
@@ -1021,10 +1174,10 @@ function report() {
       <table><thead><tr><th>Entity</th><th class="n">Prior year (net)</th><th class="n">Current year (net)</th></tr></thead><tbody>${tList.map(e => `<tr><td>${esc(e.name)}</td><td class="n">${money(R.ents[e.id].pNet)}</td><td class="n">${money(R.ents[e.id].cNet)}</td></tr>`).join('')}<tr class="tot"><td>Aggregated turnover</td><td class="n">${money(R.toPrior)}</td><td class="n">${money(R.toCur)}</td></tr></tbody></table>
       ${tbl(R.sbe.steps)}${R.T.red !== R.T.sbe ? `<p>${money(R.T.red)} test (50% reduction): ${st(R.sbe10.s)}</p>` : ''}${note('sbe')}`;
     if (R.needPeople && S.people.length) {
-        h += `<h2>8. Significant individuals and CGT concession stakeholders (s152-50 to 152-75)</h2><table><thead><tr><th>Individual</th><th>Spouse of</th>${R.isEntity ? '<th class="n">In taxpayer</th><th>Status</th>' : ''}${R.equity ? '<th class="n">In object entity</th><th>Status</th>' : ''}</tr></thead><tbody>${S.people.map(p => { const rr = R.people[p.id]; const sp = S.people.find(x => String(x.id) === String(p.spouseOf)); return `<tr><td>${esc(p.name)}${p.isTp ? ' (taxpayer)' : ''}</td><td>${sp ? esc(sp.name) : ''}</td>${R.isEntity ? `<td class="n">${rr.tpPart != null ? pct(rr.tpPart, 2) : '—'}</td><td>${rr.siTp ? 'Significant individual' : ''}${rr.stTp ? (rr.siTp ? ', ' : '') + 'Stakeholder' : ''}</td>` : ''}${R.equity ? `<td class="n">${rr.obPart != null ? pct(rr.obPart, 2) : '—'}</td><td>${rr.siOb ? 'Significant individual' : ''}${rr.stOb ? (rr.siOb ? ', ' : '') + 'Stakeholder' : ''}</td>` : ''}</tr>`; }).join('')}</tbody></table>${R.equity ? `<p>${esc(R.stakeWhy || '')} ${st(R.stakeS)}</p>` : ''}${note('people')}`;
+        h += `<h2>8. Significant individuals and CGT concession stakeholders (s152-50 to 152-75)</h2><table><thead><tr><th>Individual</th><th>Spouse of</th>${R.isEntity ? '<th class="n">In taxpayer</th><th>Status</th>' : ''}${R.equity ? '<th class="n">In object entity</th><th>Status</th>' : ''}</tr></thead><tbody>${S.people.map(p => { const rr = R.people[p.id]; const sp = S.people.find(x => String(x.id) === String(p.spouseOf)); return `<tr><td>${esc(p.name)}${p.isTp ? ' (taxpayer)' : ''}</td><td>${sp ? esc(sp.name) : ''}</td>${R.isEntity ? `<td class="n">${rr.tpPart != null ? pct(rr.tpPart, 2) + (rr.tpD.ind ? `<br><span style="color:#6b7280">${pct(rr.tpD.direct, 2)} + ${pct(rr.tpD.ind, 2)} indirect</span>` : '') : '—'}</td><td>${rr.siTp ? 'Significant individual' : ''}${rr.stTp ? (rr.siTp ? ', ' : '') + 'Stakeholder' : ''}</td>` : ''}${R.equity ? `<td class="n">${rr.obPart != null ? pct(rr.obPart, 2) + (rr.obD.ind ? `<br><span style="color:#6b7280">${pct(rr.obD.direct, 2)} + ${pct(rr.obD.ind, 2)} indirect</span>` : '') : '—'}</td><td>${rr.siOb ? 'Significant individual' : ''}${rr.stOb ? (rr.siOb ? ', ' : '') + 'Stakeholder' : ''}</td>` : ''}</tr>`; }).join('')}</tbody></table>${S.people.some(p => (p.tpInd || []).length || (p.obInd || []).length) ? `<h3>Indirect holdings</h3><table><thead><tr><th>Individual</th><th>In</th><th>Through</th><th class="n">Individual's %</th><th class="n">Entity's %</th><th class="n">Indirect</th></tr></thead><tbody>${S.people.flatMap(p => ['tp', 'ob'].flatMap(pre => (p[pre + 'Ind'] || []).filter(x => has(x.a) && has(x.b)).map(x => `<tr><td>${esc(p.name)}</td><td>${pre === 'tp' ? esc(tp.name || 'Taxpayer') : 'Entity sold'}</td><td>${esc(x.via)}</td><td class="n">${num(x.a)}%</td><td class="n">${num(x.b)}%</td><td class="n">${pct(num(x.a) * num(x.b) / 10000, 2)}</td></tr>`))).join('')}</tbody></table>` : ''}${R.equity ? `<p>${esc(R.stakeWhy || '')} ${st(R.stakeS)}</p>` : ''}${note('people')}`;
     }
     h += `<h2>9. Basic conditions (s152-10)</h2><table><thead><tr><th></th><th>Condition</th><th>Ref</th><th class="n">Result</th></tr></thead><tbody>${R.basicItems.map(x => `<tr><td>${x.k}</td><td>${x.t}</td><td>s${x.ref}</td><td class="n">${st(x.s)}</td></tr>`).join('')}</tbody></table>
-      <h3>Size / entity tests</h3>${tbl(R.routes)}${R.viaEstate ? '<p>Basic conditions met through the deceased estate rules (s152-80).</p>' : ''}${note('basic')}`;
+      <h3>Size / entity tests</h3>${tbl(R.routes)}${R.objTest ? `<h3>C2.2 – company / trust sold</h3>${kv([['Group', esc((R.objTest.grp || []).join(', ') || 'entered directly')], ['Net asset value', R.objTest.netV != null ? money(R.objTest.netV) + ' (' + R.objTest.netSrc + ')' : '—'], ['Aggregated turnover', R.objTest.turnV != null ? money(R.objTest.turnV) + ' (' + R.objTest.turnSrc + ')' : '—']])}` : ''}${R.viaEstate ? '<p>Basic conditions met through the deceased estate rules (s152-80).</p>' : ''}${note('basic')}`;
     if (R.basicOk) {
         h += `<h2>10. 15 year exemption (Subdiv 152-B)</h2>${tbl(R.f15Items)}${R.f15 && R.f15Pay && R.f15Pay.length ? `<table><thead><tr><th>Stakeholder</th><th class="n">Participation</th><th class="n">Exempt payment</th></tr></thead><tbody>${R.f15Pay.map(x => `<tr><td>${esc(x.name)}</td><td class="n">${pct(x.part, 2)}</td><td class="n">${money(x.amt)}</td></tr>`).join('')}</tbody></table><p>Payments due by ${fdate(R.f15Due)}.</p>` : ''}${note('fifteen')}`;
         if (!R.f15) {
@@ -1049,7 +1202,7 @@ function ensureTaxpayerRow() {
     if (row) { row.name = S.tp.name || 'Taxpayer'; if (S.tp.dob) row.dob = S.tp.dob; }
     if (!need && row) S.people = S.people.filter(p => !p.isTp);
 }
-function refresh() { R = compute(); renderNav(); renderSide(); fillOutputs(); report(); save(); }
+function refresh() { applyAutoRel(); R = compute(); renderNav(); renderSide(); fillOutputs(); report(); save(); }
 function rerender() {
     // remember which field had the cursor so it survives the redraw
     const ae = document.activeElement, root = ROOT();
@@ -1058,7 +1211,7 @@ function rerender() {
         const k = ae.getAttribute('data-date') ? `[data-date="${ae.getAttribute('data-date')}"]` : ae.getAttribute('data-k') ? `[data-k="${ae.getAttribute('data-k')}"]:not(.dtn)` : null;
         sel = k; try { pos = ae.selectionStart; } catch (e) { pos = null; }
     }
-    ensureTaxpayerRow(); R = compute(); renderMain(); renderNav(); renderSide(); fillOutputs(); report();
+    ensureTaxpayerRow(); applyAutoRel(); R = compute(); renderMain(); renderNav(); renderSide(); fillOutputs(); report();
     if (typeof renderIcons === 'function') renderIcons(root);
     if (sel) { const el = root.querySelector(sel); if (el) { el.focus(); try { if (pos != null && el.setSelectionRange) el.setSelectionRange(pos, pos); } catch (e) { /* not a text field */ } } }
     save();
@@ -1103,7 +1256,9 @@ function bind() {
         const k = t.getAttribute && t.getAttribute('data-k');
         if (!k) return;
         if (t.type === 'checkbox') setP(k, t.checked);
-        else if (t.tagName === 'SELECT' || t.type === 'date') setP(k, t.value);
+        else if (t.tagName === 'SELECT' || t.type === 'date') { setP(k, t.value); const m = /^entities\.(\d+)\.rel$/.exec(k); if (m) S.entities[+m[1]].relAuto = false;
+            const sm = /^people\.(\d+)\.spouseOf$/.exec(k);
+            if (sm) { const me = S.people[+sm[1]], other = S.people.find(x => String(x.id) === String(t.value)); if (me && other && !other.spouseOf) other.spouseOf = String(me.id); } }
         else return; // text inputs already handled
         rerender();
     });
@@ -1129,10 +1284,17 @@ function bind() {
         }
         e.preventDefault();
         const act = b.getAttribute('data-act');
-        if (act === 'goto') { step = b.getAttribute('data-step'); rerender(); const top = document.getElementById('sbc-tool'); if (top) window.scrollTo({ top: Math.max(top.getBoundingClientRect().top + window.scrollY - 140, 0), behavior: 'smooth' }); }
-        else if (act === 'add') { const p = b.getAttribute('data-path'); const arr = getP(p); arr.push(TPL[b.getAttribute('data-tpl')](p)); rerender(); }
+        if (act === 'goto') {
+            step = b.getAttribute('data-step'); rerender();
+            const anc = b.getAttribute('data-anchor');
+            const target = (anc && document.getElementById(anc)) || document.getElementById('sbc-tool');
+            const hdr = document.querySelector('header'); const off = (hdr ? hdr.offsetHeight : 120) + 16;
+            if (target) window.scrollTo({ top: Math.max(target.getBoundingClientRect().top + window.scrollY - off, 0), behavior: 'smooth' });
+            if (anc && target) { target.classList.add('flash'); setTimeout(() => target.classList.remove('flash'), 1600); }
+        }
+        else if (act === 'add') { const p = b.getAttribute('data-path'); let arr = getP(p); if (!Array.isArray(arr)) { arr = []; setP(p, arr); } arr.push(TPL[b.getAttribute('data-tpl')](p)); rerender(); }
         else if (act === 'del') { const p = b.getAttribute('data-path'); const arr = getP(p); const i = +b.getAttribute('data-i'); const gone = arr[i]; arr.splice(i, 1); if (p === 'entities' && gone) S.aat.periods.forEach(x => { if (String(x.user) === String(gone.id)) x.user = 'tp'; }); if (p === 'people' && gone) S.people.forEach(x => { if (String(x.spouseOf) === String(gone.id)) x.spouseOf = ''; }); rerender(); }
-        else if (act === 'userel') { S.entities[+b.getAttribute('data-i')].rel = b.getAttribute('data-rel'); rerender(); }
+        else if (act === 'relauto') { S.entities[+b.getAttribute('data-i')].relAuto = true; rerender(); }
         else if (act === 'maxret') { S.conc.retAmt = String(Math.floor(R.retMax)); rerender(); }
         else if (act === 'maxroll') { S.conc.rollAmt = String(Math.floor(R.W.g4)); rerender(); }
         else if (act === 'print') doPrint();
