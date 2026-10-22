@@ -19,7 +19,22 @@ const money = n => (n < -0.5 ? '-' : '') + '$' + Math.round(Math.abs(n || 0)).to
 const pct = (n, d = 2) => has(n) && isFinite(n) ? (Math.round(n * 100 * Math.pow(10, d)) / Math.pow(10, d)) + '%' : '—';
 const fmtNum = v => has(v) ? num(v).toLocaleString('en-AU', { maximumFractionDigits: 2 }) : '';
 const DAY = 864e5;
-const D = s => { if (!s) return null; const p = String(s).split('-').map(Number); if (p.length !== 3 || !p[0]) return null; return Date.UTC(p[0], p[1] - 1, p[2]); };
+const D = s => { if (!s) return null; const p = String(s).split('-').map(Number); if (p.length !== 3 || !p[0] || p[0] < 1900 || p[0] > 2200) return null; return Date.UTC(p[0], p[1] - 1, p[2]); };
+// Australian dd/mm/yyyy <-> ISO yyyy-mm-dd
+const isoToAu = v => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || ''); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; };
+const auToIso = v => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v || ''); if (!m) return null; const d = +m[1], mo = +m[2], y = +m[3]; if (y < 1900 || y > 2200 || mo < 1 || mo > 12 || d < 1) return null; if (d > new Date(Date.UTC(y, mo, 0)).getUTCDate()) return null; return `${m[3]}-${m[2]}-${m[1]}`; };
+// Tidy typed text into dd/mm/yyyy as the user types (slashes added automatically)
+function maskDate(raw, deleting) {
+    const parts = String(raw).split(/[^0-9]+/);
+    let digits = '';
+    if (parts.length > 1) { parts.forEach((pt, i) => { if (i < parts.length - 1 && i < 2 && pt.length === 1) pt = '0' + pt; digits += pt; }); }
+    else digits = parts[0];
+    digits = digits.slice(0, 8);
+    let out = digits.slice(0, 2);
+    if (digits.length > 2) out += '/' + digits.slice(2, 4); else if (digits.length === 2 && !deleting) out += '/';
+    if (digits.length > 4) out += '/' + digits.slice(4, 8); else if (digits.length === 4 && !deleting) out += '/';
+    return out;
+}
 const iso = t => t == null ? '' : new Date(t).toISOString().slice(0, 10);
 const fdate = t => t == null ? '—' : new Date(t).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 const daysIncl = (a, b) => (a == null || b == null || b < a) ? 0 : Math.round((b - a) / DAY) + 1;
@@ -119,13 +134,16 @@ function compute() {
     r.ev = D(a.eventDate); r.acq = D(a.acqDate);
     r.start = (yes(a.deemed) && D(a.deemedDate)) || r.acq;
     r.fy = r.ev ? fyOf(r.ev) : fyOf(Date.now());
-    const years = Object.keys(SBC_DATA).sort();
-    r.rt = SBC_DATA[r.fy] || SBC_DATA[years[years.length - 1]];
-    r.rtWarn = !SBC_DATA[r.fy] ? `No thresholds stored for FY${r.fy}; using ${r.rt.name}. Add the year to shared/sbc-data.js.` : '';
+    const years = Object.keys(SBC_DATA).map(Number).sort((x, y) => x - y);
+    const near = SBC_DATA[r.fy] ? r.fy : (r.fy < years[0] ? years[0] : years[years.length - 1]);
+    r.rt = SBC_DATA[near];
+    r.fyName = `${r.fy - 1} - ${r.fy} (FY${String(r.fy).slice(2)})` + (r.ev ? '' : ' – enter event date');
+    r.rtWarn = r.ev && !SBC_DATA[r.fy] ? `No thresholds stored for ${r.fyName}; using the ${r.rt.name} figures. Add the year to shared/sbc-data.js.` : '';
     r.reform = r.ev != null && r.ev >= D(RU.dates.cgtReform);
     r.post2018 = r.ev != null && r.ev >= D(RU.dates.sharesRules);
     r.ownDays = daysIncl(r.start, r.ev);
     r.ownYears = r.ownDays / 365.25;
+    r.ownTxt = r.ownDays ? r.ownDays.toLocaleString() + ' days (' + r.ownYears.toFixed(2) + ' yrs)' : '—';
     r.preCGT = r.acq != null && r.acq < D(RU.dates.preCGT);
     r.T = { mnav: r.rt.mnav, sbe: r.rt.sbeTurnover, red: r.rt.reductionTurnover, ret: r.rt.retirementLimit };
 
@@ -506,7 +524,7 @@ const val = p => { const x = getP(p); return x == null ? '' : x; };
 const tin = (p, cls = '', ph = '') => { const x = val(p); return `<input type="text" data-k="${p}" class="${cls}" value="${esc(cls.includes('money') ? fmtNum(x) : x)}" placeholder="${esc(ph)}">`; };
 const tmon = (p, ph = '0') => tin(p, 'money', ph);
 const tpct = (p, ph = '0') => tin(p, 'pct', ph);
-const tdate = p => `<input type="date" data-k="${p}" value="${esc(val(p))}">`;
+const tdate = p => `<span class="dt"><input type="text" inputmode="numeric" autocomplete="off" maxlength="10" placeholder="dd/mm/yyyy" data-date="${p}" value="${esc(isoToAu(val(p)))}"><button type="button" class="dtb" data-act="pick" data-path="${p}" tabindex="-1" title="Pick a date"><i data-lucide="calendar"></i></button><input type="date" class="dtn" data-k="${p}" value="${esc(val(p))}" tabindex="-1" aria-hidden="true"></span>`;
 const tsel = (p, opts) => `<select data-k="${p}">${opts.map(([v, t]) => `<option value="${esc(v)}"${String(val(p)) === String(v) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
 const F = (label, ctrl, small = '') => `<label class="f">${label}${small ? ` <small>${small}</small>` : ''}${ctrl}</label>`;
 const icon = n => `<i data-lucide="${n}"></i>`;
@@ -570,7 +588,7 @@ P.asset = () => {
     const a = S.asset;
     return `<div class="card"><h3>CGT event &amp; asset</h3><p class="lead">Confirm a CGT event happened to an asset taxed under the CGT rules. The concessions can't apply to depreciating assets, trading stock or event K7.</p>
     <div class="grid g2">${F('Asset description', tin('asset.desc', '', 'e.g. Goodwill of plumbing business'))}${F('Asset type', tsel('asset.kind', ASSET_KINDS))}${F('CGT event', tsel('asset.event', EVENTS))}</div>
-    <div class="grid" style="margin-top:10px">${F('Date of CGT event', tdate('asset.eventDate'), 'usually contract date')}${F('Date asset acquired', tdate('asset.acqDate'))}${F('Income year', `<input type="text" disabled value="${esc(R.rt.name)}">`)}${F('Ownership period', `<input type="text" disabled value="${R.ownDays ? R.ownDays.toLocaleString() + ' days (' + R.ownYears.toFixed(2) + ' yrs)' : '—'}">`)}</div>
+    <div class="grid" style="margin-top:10px">${F('Date of CGT event', tdate('asset.eventDate'), 'usually contract date')}${F('Date asset acquired', tdate('asset.acqDate'))}${F('Income year', `<input type="text" disabled data-o="fyName" data-f="text-in">`, 'from event date')}${F('Ownership period', `<input type="text" disabled data-o="ownTxt" data-f="text-in">`)}</div>
     ${yn('asset.deemed', 'Is the asset treated as acquired earlier than its actual acquisition date?', { ref: '152-45', hint: 'e.g. replacement asset under a compulsory acquisition / loss roll-over, marriage breakdown roll-over, small business restructure roll-over, or an inherited asset. The earlier date is used for the ownership, discount and active asset periods.' })}
     ${yes(a.deemed) ? `<div class="grid g2">${F('Deemed acquisition date', tdate('asset.deemedDate'))}${F('Reason', tsel('asset.deemedWhy', DEEMED_WHY))}</div>` : ''}
     <h4>Checks</h4>
@@ -943,7 +961,7 @@ function renderSide() {
       <div class="card"><h5>Basic conditions</h5>
       ${R.basicItems.map(x => `<div class="bc"><span>${x.k} ${x.t.length > 46 ? x.t.slice(0, 44) + '…' : x.t}</span>${badge(x.s)}</div>`).join('')}
       <div style="margin-top:8px">${badge(R.basicS, R.basicS === 'pass' ? 'Basic conditions met' : R.basicS === 'fail' ? 'Not met' : 'Incomplete')}</div></div>
-      <div class="card"><h5>Thresholds – ${esc(R.rt.name)}</h5>
+      <div class="card"><h5>Thresholds – ${esc(R.fyName)}</h5>
       <div class="bc"><span>Net asset value</span><b>${money(R.T.mnav)}</b></div><div class="bc"><span>CGT SBE turnover</span><b>${money(R.T.sbe)}</b></div>${R.T.red !== R.T.sbe ? `<div class="bc"><span>50% reduction turnover</span><b>${money(R.T.red)}</b></div>` : ''}<div class="bc"><span>Retirement limit</span><b>${money(R.T.ret)}</b></div><div class="bc"><span>CGT cap</span><b>${R.rt.cgtCap ? money(R.rt.cgtCap) : 'TBA'}</b></div></div>`;
 }
 
@@ -967,6 +985,7 @@ function fillOutputs() {
         const v = k.split('.').reduce((o, kk) => (o == null ? undefined : o[kk]), R);
         if (f === 'html') el.innerHTML = v || '';
         else if (f === 'money-in') el.value = money(v || 0);
+        else if (f === 'text-in') el.value = v == null ? '' : v;
         else el.textContent = f === 'pct' ? pct(v) : money(v || 0);
     });
 }
@@ -979,8 +998,8 @@ function report() {
     const note = id => S.notes[id] ? `<div class="note">${esc(S.notes[id])}</div>` : '';
     const g = S.gain;
     const cbRows = [['First element', R.cb1], ['Incidental costs (2nd element)', R.cb2], ['Costs of ownership (3rd element)', R.cb3], ['Capital expenditure (4th element)', R.cb4], ['Title costs (5th element)', R.cb5], ['Less reductions', -R.cbRed]];
-    let h = `<div class="rhead"><div><div class="firm">Quin &amp; Bourke</div><h1>Small business CGT concessions – workpaper</h1><div style="color:#4b5563">Division 152 ITAA 1997 · ${esc(R.rt.name)}</div></div><div style="text-align:right;font-size:11px">${esc(c.name || '')}${c.code ? '<br>Client code ' + esc(c.code) : ''}</div></div>`;
-    h += `<div class="two">${kv([['Client', esc(c.name || '—')], ['Taxpayer', esc(tp.name || '—') + ' (' + TYPE_NAME[tp.type] + ')'], ['Income year', esc(R.rt.name)], ['Prepared by', esc(c.preparer || '—') + (c.prepDate ? ' · ' + fdate(D(c.prepDate)) : '')], ['Reviewed by', esc(c.reviewer || '—') + (c.revDate ? ' · ' + fdate(D(c.revDate)) : '')]])}
+    let h = `<div class="rhead"><div><div class="firm">Quin &amp; Bourke</div><h1>Small business CGT concessions – workpaper</h1><div style="color:#4b5563">Division 152 ITAA 1997 · ${esc(R.fyName)}</div></div><div style="text-align:right;font-size:11px">${esc(c.name || '')}${c.code ? '<br>Client code ' + esc(c.code) : ''}</div></div>`;
+    h += `<div class="two">${kv([['Client', esc(c.name || '—')], ['Taxpayer', esc(tp.name || '—') + ' (' + TYPE_NAME[tp.type] + ')'], ['Income year', esc(R.fyName)], ['Prepared by', esc(c.preparer || '—') + (c.prepDate ? ' · ' + fdate(D(c.prepDate)) : '')], ['Reviewed by', esc(c.reviewer || '—') + (c.revDate ? ' · ' + fdate(D(c.revDate)) : '')]])}
       ${kv([['Asset', esc(a.desc || '—')], ['Asset type', KIND_NAME[a.kind]], ['CGT event', esc((EVENTS.find(e => e[0] === a.event) || [, a.event])[1])], ['Event date', fdate(R.ev)], ['Acquired', fdate(R.acq) + (yes(a.deemed) && a.deemedDate ? ` (treated as ${fdate(D(a.deemedDate))})` : '')], ['Ownership period', R.ownDays ? R.ownDays.toLocaleString() + ' days (' + R.ownYears.toFixed(2) + ' years)' : '—']])}</div>`;
     h += `<h2>Summary</h2><div class="two"><div>${calcTable('rep')}</div><div>${kv([['Basic conditions', st(R.basicS) + (R.viaEstate ? ' (deceased estate)' : '')], ['15 year exemption', R.f15 ? st('pass') + ' applied' : st(R.basicOk ? (R.f15S === 'inc' ? 'inc' : 'na') : 'na')], ['50% active asset reduction', W.red > 0 ? 'Applied' : R.redAvail ? 'Not applied (choice)' : 'Not available'], ['Retirement exemption', W.ret > 0 ? money(W.ret) : 'Not applied'], ['Roll-over', W.roll > 0 ? money(W.roll) : 'Not applied']])}</div></div>`;
     if (R.flags.length) h += R.flags.map(f => `<div class="note">${f}</div>`).join('');
@@ -1031,7 +1050,19 @@ function ensureTaxpayerRow() {
     if (!need && row) S.people = S.people.filter(p => !p.isTp);
 }
 function refresh() { R = compute(); renderNav(); renderSide(); fillOutputs(); report(); save(); }
-function rerender() { ensureTaxpayerRow(); R = compute(); renderMain(); renderNav(); renderSide(); fillOutputs(); report(); if (typeof renderIcons === 'function') renderIcons(ROOT()); save(); }
+function rerender() {
+    // remember which field had the cursor so it survives the redraw
+    const ae = document.activeElement, root = ROOT();
+    let sel = null, pos = null;
+    if (ae && root.contains(ae)) {
+        const k = ae.getAttribute('data-date') ? `[data-date="${ae.getAttribute('data-date')}"]` : ae.getAttribute('data-k') ? `[data-k="${ae.getAttribute('data-k')}"]:not(.dtn)` : null;
+        sel = k; try { pos = ae.selectionStart; } catch (e) { pos = null; }
+    }
+    ensureTaxpayerRow(); R = compute(); renderMain(); renderNav(); renderSide(); fillOutputs(); report();
+    if (typeof renderIcons === 'function') renderIcons(root);
+    if (sel) { const el = root.querySelector(sel); if (el) { el.focus(); try { if (pos != null && el.setSelectionRange) el.setSelectionRange(pos, pos); } catch (e) { /* not a text field */ } } }
+    save();
+}
 function save() { try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ } }
 function load(obj) {
     const b = blankState();
@@ -1046,6 +1077,16 @@ function bind() {
     const root = ROOT();
     root.addEventListener('input', e => {
         const t = e.target, k = t.getAttribute && t.getAttribute('data-k');
+        const dk = t.getAttribute && t.getAttribute('data-date');
+        if (dk) {
+            const deleting = (e.inputType || '').startsWith('delete');
+            const out = maskDate(t.value, deleting);
+            if (out !== t.value) { t.value = out; t.setSelectionRange(out.length, out.length); }
+            const iso = auToIso(out);
+            t.classList.toggle('bad', out.length === 10 && !iso);
+            if (iso || !out) { setP(dk, iso || ''); const n = t.parentNode.querySelector('.dtn'); if (n) n.value = iso || ''; refresh(); }
+            return;
+        }
         if (!k || t.type === 'checkbox' || t.tagName === 'SELECT' || t.type === 'date') return;
         setP(k, t.value);
         refresh();
@@ -1066,8 +1107,16 @@ function bind() {
         else return; // text inputs already handled
         rerender();
     });
+    root.addEventListener('focusin', e => { const t = e.target; if (t.getAttribute && t.getAttribute('data-date')) t.dataset.was = getP(t.getAttribute('data-date')) || ''; });
     root.addEventListener('focusout', e => {
         const t = e.target;
+        if (t.getAttribute && t.getAttribute('data-date')) {
+            const v = t.value.trim();
+            if (v && !auToIso(v)) { t.classList.add('bad'); return; } // keep what was typed so it can be fixed
+            t.classList.remove('bad');
+            if (t.dataset.was !== (getP(t.getAttribute('data-date')) || '')) setTimeout(rerender, 0); // redraw once the date is finished
+            return;
+        }
         if (t.classList && t.classList.contains('money') && t.value) t.value = fmtNum(t.value);
     });
     root.addEventListener('click', e => {
@@ -1087,6 +1136,7 @@ function bind() {
         else if (act === 'maxret') { S.conc.retAmt = String(Math.floor(R.retMax)); rerender(); }
         else if (act === 'maxroll') { S.conc.rollAmt = String(Math.floor(R.W.g4)); rerender(); }
         else if (act === 'print') doPrint();
+        else if (act === 'pick') { const n = b.parentNode.querySelector('.dtn'); if (n) { try { n.showPicker(); } catch (err) { n.focus(); n.click(); } } }
     });
     $('#sbc-btn-print').onclick = doPrint;
     $('#sbc-btn-save').onclick = () => {
