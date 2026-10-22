@@ -18,6 +18,15 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="shared/styles.css">
 
+    <!-- Tab bar: wraps onto extra rows instead of scrolling sideways, so every tool stays visible at the top -->
+    <style>
+        #tab-bar { flex-wrap: wrap; overflow: visible; white-space: normal; gap: 2px; border-bottom: 0; padding-bottom: 12px; }
+        #tab-bar > * { margin-left: 0 !important; }
+        #tab-bar > button { padding: 8px 11px !important; border-radius: 10px !important; font-size: 13px !important; white-space: nowrap; gap: 6px !important; }
+        #tab-bar > button[aria-selected="true"] { box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+        @media (max-width: 640px) { #tab-bar > button { padding: 7px 10px !important; font-size: 12px !important; } }
+    </style>
+
     <!-- Chart.js, stored locally (used by the Independent Contractor tab) -->
     <script src="shared/vendor/chart.umd.js"></script>
 </head>
@@ -82,12 +91,12 @@
          ============================================================ -->
     <script>
         const TABS = [
-            { id: 'income-tax', label: 'Income Tax Calculator',           icon: 'calculator' },
-            { id: 'home-loan',  label: 'Home Loan Calculator',            icon: 'home' },
+            { id: 'income-tax', label: 'Income Tax',                      icon: 'calculator' },
+            { id: 'home-loan',  label: 'Home Loan',                       icon: 'home' },
             { id: 'psi',        label: 'PSI · PSB · Part IVA',            icon: 'user-check' },
             { id: 'sb-cgt',     label: 'Small Business CGT',              icon: 'briefcase' },
-            { id: 'contractor', label: 'Independent Contractor Test',     icon: 'scale' },
-            { id: 'averaging',  label: 'Special Professionals Averaging', icon: 'bar-chart-3' },
+            { id: 'contractor', label: 'Contractor Test',                 icon: 'scale' },
+            { id: 'averaging',  label: 'Professionals Averaging',         icon: 'bar-chart-3' },
             { id: 'dividends',  label: 'Dividend Lookup',                 icon: 'coins' },
         ];
     </script>
